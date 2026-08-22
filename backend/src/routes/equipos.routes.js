@@ -129,7 +129,7 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     } else if (targetPersonal && targetPersonal.trim() && targetPersonal !== 'No asignado') {
       // Buscar o crear en empleados
-      const empFind = await pool.query('SELECT id FROM empleados WHERE nombre = $1', [targetPersonal.trim()]);
+      const empFind = await pool.query('SELECT id FROM empleados WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))', [targetPersonal.trim()]);
       if (empFind.rows.length > 0) {
         targetEmpleadoId = empFind.rows[0].id;
       } else {
@@ -190,7 +190,7 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
       let pAsignado = personal_asignado ? personal_asignado.trim() : null;
 
       if (pAsignado && pAsignado !== 'No asignado' && pAsignado !== 'SIN ASIGNAR') {
-        const empFind = await pool.query('SELECT id FROM empleados WHERE nombre = $1', [pAsignado]);
+        const empFind = await pool.query('SELECT id FROM empleados WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))', [pAsignado]);
         if (empFind.rows.length > 0) {
           empId = empFind.rows[0].id;
         } else {
@@ -280,7 +280,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         targetPersonal = empRes.rows[0].nombre;
       }
     } else if (targetPersonal && targetPersonal.trim() && targetPersonal !== 'No asignado') {
-      const empFind = await pool.query('SELECT nombre, id FROM empleados WHERE nombre = $1', [targetPersonal.trim()]);
+      const empFind = await pool.query('SELECT nombre, id FROM empleados WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))', [targetPersonal.trim()]);
       if (empFind.rows.length > 0) {
         targetEmpleadoId = empFind.rows[0].id;
       }

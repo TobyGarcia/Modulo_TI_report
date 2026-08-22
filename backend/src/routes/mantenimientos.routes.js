@@ -305,6 +305,19 @@ router.post('/reporte', authenticateToken, async (req, res) => {
       reportRecord = result.rows[0];
     }
 
+    // Garantizar que cualquier cita/mantenimiento programado previo de este equipo cambie a 'completado'
+    try {
+      await pool.query(`
+        UPDATE mantenimientos
+        SET estado = 'completado',
+            fecha_realizado = COALESCE(fecha_realizado, $1),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE equipo_id = $2 AND estado = 'programado' AND id != $3;
+      `, [fechaReal, parseInt(equipo_id, 10), reportRecord.id]);
+    } catch (e) {
+      console.error('Error al actualizar estados programados a completado:', e);
+    }
+
     // --- REQUERIMIENTO 3: Ciclo de vida automático a 6 meses (Lunes a Sábado, hora pendiente) ---
     let siguienteMantenimiento = null;
     if (auto_programar_siguiente) {

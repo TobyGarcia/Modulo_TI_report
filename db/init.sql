@@ -131,6 +131,34 @@ CREATE TABLE IF NOT EXISTS historial_asignaciones (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla de Salidas de Equipos (Formato SGI R1PTI3)
+CREATE TABLE IF NOT EXISTS salidas_equipos (
+    id SERIAL PRIMARY KEY,
+    codigo_formato VARCHAR(50) DEFAULT 'R1PTI3',
+    requisicion VARCHAR(100),
+    lugar_emision VARCHAR(150) DEFAULT 'san Francisco de Campeche, Campeche',
+    fecha_solicitud DATE DEFAULT CURRENT_DATE,
+    tipo_solicitud VARCHAR(20) DEFAULT 'temporal', -- 'temporal' o 'permanente'
+    solicitante_nombre VARCHAR(150),
+    solicitante_email VARCHAR(150),
+    solicitante_puesto VARCHAR(100),
+    departamento VARCHAR(100),
+    jefe_inmediato VARCHAR(150),
+    fecha_inicio DATE DEFAULT CURRENT_DATE,
+    fecha_termino DATE,
+    direccion_resguardo TEXT,
+    observaciones TEXT,
+    equipos_json JSONB DEFAULT '[]',
+    equipo_id INT REFERENCES equipos(id) ON DELETE SET NULL,
+    empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+    firma_empleado TEXT,
+    firma_jefe TEXT,
+    firma_ti TEXT,
+    estado VARCHAR(20) DEFAULT 'activo', -- 'activo', 'vencido', 'finalizado'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Comentarios explicativos
 COMMENT ON TABLE empleados IS 'Tabla de empleados / personal para asignación de equipos';
 COMMENT ON TABLE estados_equipo IS 'Catálogo de estados de asignación de equipos';
@@ -138,3 +166,5 @@ COMMENT ON TABLE equipos IS 'Tabla principal de inventario de equipos de cómput
 COMMENT ON TABLE usuarios IS 'Tabla de usuarios autenticados del sistema';
 COMMENT ON TABLE mantenimientos IS 'Tabla de programación, reportes individuales y bitácora de mantenimiento SGI';
 COMMENT ON TABLE asignaciones IS 'Tabla principal de asignaciones, desasignaciones y reasignaciones de equipos';
+COMMENT ON TABLE salidas_equipos IS 'Tabla de solicitudes y pases de salida de equipo informático (Formato SGI R1PTI3)';
+

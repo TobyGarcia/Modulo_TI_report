@@ -69,6 +69,15 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'El nombre del empleado es obligatorio' });
     }
 
+    const existingCheck = await pool.query(
+      'SELECT id FROM empleados WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) AND estado != \'inactivo\'',
+      [nombre.trim()]
+    );
+
+    if (existingCheck.rows.length > 0) {
+      return res.status(400).json({ error: `Ya existe un empleado registrado con el nombre "${nombre.trim()}"` });
+    }
+
     const query = `
       INSERT INTO empleados (nombre, area, empresa, no_empleado, puesto, email, estado)
       VALUES ($1, $2, $3, $4, $5, $6, 'activo')

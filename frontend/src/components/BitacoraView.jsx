@@ -13,6 +13,7 @@ import {
 import MaintenanceReportModal from './MaintenanceReportModal';
 import ScheduleMaintenanceModal from './ScheduleMaintenanceModal';
 import CalendarView from './CalendarView';
+import Pagination from './Pagination';
 
 const safeFormatDate = (rawDate) => {
   if (!rawDate) return 'N/A';
@@ -37,6 +38,9 @@ export default function BitacoraView({ token, currentUser }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState('todos'); // 'todos' | 'preventivo' | 'correctivo'
   const [selectedDateForSchedule, setSelectedDateForSchedule] = useState(null);
+  const [currentProgramadosPage, setCurrentProgramadosPage] = useState(1);
+  const [currentHistorialPage, setCurrentHistorialPage] = useState(1);
+  const pageSize = 20;
 
   // Modales
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -275,6 +279,12 @@ export default function BitacoraView({ token, currentUser }) {
   const programados = filteredMantenimientos.filter(m => m.estado === 'programado');
   const completados = filteredMantenimientos.filter(m => m.estado === 'completado');
 
+  const totalProgramadosPages = Math.ceil(programados.length / pageSize) || 1;
+  const currentProgramados = programados.slice((currentProgramadosPage - 1) * pageSize, currentProgramadosPage * pageSize);
+
+  const totalHistorialPages = Math.ceil(filteredHistorialAsignaciones.length / pageSize) || 1;
+  const currentHistorial = filteredHistorialAsignaciones.slice((currentHistorialPage - 1) * pageSize, currentHistorialPage * pageSize);
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Encabezado Principal */}
@@ -479,7 +489,7 @@ export default function BitacoraView({ token, currentUser }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {programados.map(m => (
+                  {currentProgramados.map(m => (
                     <tr key={m.id} className="hover:bg-amber-50/40 transition">
                       <td className="p-3 font-semibold text-amber-900">
                         <div>{safeFormatDate(m.fecha_programada)}</div>
@@ -519,6 +529,13 @@ export default function BitacoraView({ token, currentUser }) {
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                currentPage={currentProgramadosPage}
+                totalPages={totalProgramadosPages}
+                totalItems={programados.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentProgramadosPage}
+              />
             </div>
           )}
         </div>
@@ -655,7 +672,7 @@ export default function BitacoraView({ token, currentUser }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredHistorialAsignaciones.map(hist => {
+                  {currentHistorial.map(hist => {
                     const isDesasignacion = hist.tipo_movimiento === 'desasignacion';
                     return (
                       <tr key={hist.id} className="hover:bg-indigo-50/30 transition">
@@ -702,6 +719,13 @@ export default function BitacoraView({ token, currentUser }) {
                   })}
                 </tbody>
               </table>
+              <Pagination
+                currentPage={currentHistorialPage}
+                totalPages={totalHistorialPages}
+                totalItems={filteredHistorialAsignaciones.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentHistorialPage}
+              />
             </div>
           )}
         </div>

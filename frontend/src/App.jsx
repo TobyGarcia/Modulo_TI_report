@@ -9,6 +9,8 @@ import ScanResultView from './components/ScanResultView';
 import UserManagement from './components/UserManagement';
 import BitacoraView from './components/BitacoraView';
 import EmployeeManagement from './components/EmployeeManagement';
+import SalidasView from './components/SalidasView';
+import M365View from './components/M365View';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -219,6 +221,12 @@ export default function App() {
           )}
           {activeTab === 'bitacora' && (
             <BitacoraView token={token} currentUser={user} />
+          )}
+          {activeTab === 'salidas' && (
+            <SalidasView token={token} currentUser={user} />
+          )}
+          {activeTab === 'm365' && (
+            <M365View token={token} currentUser={user} />
           )}
           {activeTab === 'users' && (
             <UserManagement token={token} currentUser={user} />

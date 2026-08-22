@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, FileSpreadsheet, Printer, Edit3, Trash2, QrCode, Monitor, RefreshCw, Globe, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import Pagination from './Pagination';
 
 export default function EquipmentList({
   token,
@@ -14,7 +15,9 @@ export default function EquipmentList({
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [qrModalEquipo, setQrModalEquipo] = useState(null);
-  
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
   // URL o IP para los códigos QR (detecta VITE_NGROK_DOMAIN de .env o localStorage u origin actual)
   const [customBaseUrl, setCustomBaseUrl] = useState(() => {
     const saved = localStorage.getItem('qr_base_url');
@@ -54,6 +57,7 @@ export default function EquipmentList({
       const data = await res.json();
       setAuthError(false);
       setEquipments(Array.isArray(data) ? data : []);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Error al cargar equipos:', err);
       setEquipments([]);
@@ -71,6 +75,9 @@ export default function EquipmentList({
     setSearch(val);
     fetchEquipments(val);
   };
+
+  const totalPages = Math.ceil(equipments.length / pageSize) || 1;
+  const currentEquipments = equipments.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -270,7 +277,7 @@ export default function EquipmentList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {equipments.map((eq) => {
+                {currentEquipments.map((eq) => {
                   const isSelected = selectedIds.includes(eq.id);
                   return (
                     <tr
@@ -345,6 +352,13 @@ export default function EquipmentList({
                 })}
               </tbody>
             </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={equipments.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>

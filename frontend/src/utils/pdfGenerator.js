@@ -935,3 +935,572 @@ export function generarFormatoDesasignacionPDF(datosDesasignacion, equipo, emple
   doc.save(`Acta_Desasignacion_${equipo.hostname || equipo.serial}_${dia}-${mes}-${anio}.pdf`);
 }
 
+/**
+ * Genera el PDF de Solicitud de Salida de Equipo Informático en formato HORIZONTAL (Formato SGI R1PTI3)
+ */
+export function generarFormatoSalidaPDF(salidaData, opciones = { firmaEnBlanco: false }) {
+  const doc = new jsPDF({
+    orientation: 'l', // Formato Horizontal (Landscape)
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth(); // 297 mm
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2; // 273 mm
+
+  // --- ENCABEZADO OFICIAL SGI R1PTI3 ---
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, 22);
+
+  // Líneas divisorias verticales del encabezado
+  doc.line(margin + 55, margin, margin + 55, margin + 22);
+  doc.line(margin + 210, margin, margin + 210, margin + 22);
+
+  // Logo ITZ
+  try {
+    doc.addImage(LOGO_ITZ_BASE64, 'JPEG', margin + 3.5, margin + 2.5, 48, 17);
+  } catch (e) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('ITZ', margin + 12, margin + 11);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OIL & GAS', margin + 12, margin + 16);
+  }
+
+  // Título y Código en la Columna Central
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('CÓDIGO', margin + 132.5, margin + 9, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text(salidaData.codigo_formato || 'R1PTI3', margin + 132.5, margin + 16, { align: 'center' });
+
+  // Tabla lateral derecha (Sistema, Versión, Página)
+  doc.line(margin + 210, margin + 7.3, margin + contentWidth, margin + 7.3);
+  doc.line(margin + 210, margin + 14.6, margin + contentWidth, margin + 14.6);
+  doc.line(margin + 235, margin, margin + 235, margin + 22);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema:', margin + 212, margin + 5.5);
+  doc.text('SGI', margin + 238, margin + 5.5);
+
+  doc.text('Versión:', margin + 212, margin + 12.5);
+  doc.text('01', margin + 238, margin + 12.5);
+
+  doc.text('Página:', margin + 212, margin + 19.5);
+  doc.text('1 de 1', margin + 238, margin + 19.5);
+
+  // Barra Amarilla de Título Principal
+  let currentY = margin + 22;
+  doc.setFillColor(245, 175, 0);
+  doc.rect(margin, currentY, contentWidth, 7, 'F');
+  doc.rect(margin, currentY, contentWidth, 7, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('SOLICITUD DE SALIDA DE EQUIPO INFORMATICO', margin + (contentWidth / 2), currentY + 4.8, { align: 'center' });
+
+  currentY += 7;
+
+  // FILA 1: REQUISICIÓN Y FECHA DE SOLICITUD
+  doc.rect(margin, currentY, contentWidth, 6.5);
+  doc.line(margin + 50, currentY, margin + 50, currentY + 6.5);
+  doc.line(margin + 170, currentY, margin + 170, currentY + 6.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setFillColor(245, 175, 0);
+  doc.rect(margin, currentY, 50, 6.5, 'F');
+  doc.rect(margin, currentY, 50, 6.5, 'S');
+  doc.text('Requisición', margin + 25, currentY + 4.5, { align: 'center' });
+
+  if (salidaData.requisicion) {
+    doc.setFont('helvetica', 'normal');
+    doc.text(salidaData.requisicion, margin + 53, currentY + 4.5);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Fecha de solicitud:', margin + 53, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  const fechaSol = salidaData.fecha_solicitud ? new Date(salidaData.fecha_solicitud).toLocaleDateString('es-MX') : new Date().toLocaleDateString('es-MX');
+  doc.text(fechaSol, margin + 85, currentY + 4.5);
+
+  doc.text(salidaData.lugar_emision || 'san Francisco de Campeche, Campeche', margin + 173, currentY + 4.5);
+
+  currentY += 6.5;
+
+  // FILA 2: TIPO DE SOLICITUD DE SALIDA
+  doc.rect(margin, currentY, contentWidth, 6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('Tipo de solicitud de salida:', margin + 3, currentY + 4.5);
+
+  const esTemporal = salidaData.tipo_solicitud === 'temporal' || !salidaData.tipo_solicitud;
+  const esPermanente = salidaData.tipo_solicitud === 'permanente';
+
+  // Casilla Temporal
+  doc.rect(margin + 55, currentY + 1.2, 4, 4);
+  if (esTemporal) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('X', margin + 56.2, currentY + 4.3);
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.text('Temporal', margin + 61, currentY + 4.5);
+
+  // Casilla Permanente
+  doc.rect(margin + 95, currentY + 1.2, 4, 4);
+  if (esPermanente) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('X', margin + 96.2, currentY + 4.3);
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.text('Permanente', margin + 101, currentY + 4.5);
+
+  currentY += 6.5;
+
+  // FILA 3: NOMBRE SOLICITANTE Y CORREO ELECTRONICO
+  doc.rect(margin, currentY, contentWidth, 6.5);
+  doc.line(margin + 170, currentY, margin + 170, currentY + 6.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nombre del Solicitante:', margin + 3, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(salidaData.solicitante_nombre || '', margin + 42, currentY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Correo electronico:', margin + 173, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(salidaData.solicitante_email || '', margin + 208, currentY + 4.5);
+
+  currentY += 6.5;
+
+  // FILA 4: JEFE INMEDIATO, DEPARTAMENTO, PUESTO SOLICITANTE
+  doc.rect(margin, currentY, contentWidth, 6.5);
+  doc.line(margin + 95, currentY, margin + 95, currentY + 6.5);
+  doc.line(margin + 170, currentY, margin + 170, currentY + 6.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Jefe Inmediato:', margin + 3, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(salidaData.jefe_inmediato || '', margin + 28, currentY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Departamento:', margin + 98, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(salidaData.departamento || '', margin + 124, currentY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Puesto del Solicitante:', margin + 173, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(salidaData.solicitante_puesto || '', margin + 210, currentY + 4.5);
+
+  currentY += 6.5;
+
+  // FILA 5: PERIODO INICIO Y TERMINO
+  doc.rect(margin, currentY, contentWidth, 6.5);
+  doc.line(margin + 136.5, currentY, margin + 136.5, currentY + 6.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Fecha de inicio del periodo:', margin + 3, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  const fechaIni = salidaData.fecha_inicio ? new Date(salidaData.fecha_inicio).toLocaleDateString('es-MX') : new Date().toLocaleDateString('es-MX');
+  doc.text(fechaIni, margin + 48, currentY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Fecha de termino del periodo:', margin + 140, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  const fechaFin = salidaData.fecha_termino ? new Date(salidaData.fecha_termino).toLocaleDateString('es-MX') : 'N/A';
+  doc.text(fechaFin, margin + 190, currentY + 4.5);
+
+  currentY += 6.5;
+
+  // BARRA AMARILLA SUBHEADER
+  doc.setFillColor(245, 175, 0);
+  doc.rect(margin, currentY, contentWidth, 6.5, 'F');
+  doc.rect(margin, currentY, contentWidth, 6.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Equipos Informáticos que se solicita pase de salida:', margin + (contentWidth / 2), currentY + 4.5, { align: 'center' });
+
+  currentY += 6.5;
+
+  // TABLA DE EQUIPOS EN FORMATO HORIZONTAL
+  const colCant = 22;
+  const colTipo = 45;
+  const colModSer = 75;
+  const colMarca = 40;
+  const colDir = contentWidth - colCant - colTipo - colModSer - colMarca;
+
+  doc.setFillColor(245, 245, 245);
+  doc.rect(margin, currentY, contentWidth, 6.5, 'F');
+  doc.rect(margin, currentY, contentWidth, 6.5, 'S');
+
+  doc.line(margin + colCant, currentY, margin + colCant, currentY + 6.5);
+  doc.line(margin + colCant + colTipo, currentY, margin + colCant + colTipo, currentY + 6.5);
+  doc.line(margin + colCant + colTipo + colModSer, currentY, margin + colCant + colTipo + colModSer, currentY + 6.5);
+  doc.line(margin + colCant + colTipo + colModSer + colMarca, currentY, margin + colCant + colTipo + colModSer + colMarca, currentY + 6.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('Cantidad', margin + colCant / 2, currentY + 4.5, { align: 'center' });
+  doc.text('Tipo de equipo', margin + colCant + colTipo / 2, currentY + 4.5, { align: 'center' });
+  doc.text('Modelo/Numero Serie', margin + colCant + colTipo + colModSer / 2, currentY + 4.5, { align: 'center' });
+  doc.text('Marca', margin + colCant + colTipo + colModSer + colMarca / 2, currentY + 4.5, { align: 'center' });
+  doc.text('Lugar en donde estará en resguardo (Dirección)', margin + colCant + colTipo + colModSer + colMarca + colDir / 2, currentY + 4.5, { align: 'center' });
+
+  currentY += 6.5;
+
+  let items = Array.isArray(salidaData.equipos_json) && salidaData.equipos_json.length > 0
+    ? salidaData.equipos_json
+    : [{ cantidad: 1, tipo_equipo: 'Laptop', modelo_serial: 'N/A', marca: 'N/A' }];
+
+  const totalFilas = Math.max(items.length, 5);
+  const rowHeight = 7;
+  const tableHeight = totalFilas * rowHeight;
+
+  doc.rect(margin, currentY, contentWidth, tableHeight);
+  doc.line(margin + colCant, currentY, margin + colCant, currentY + tableHeight);
+  doc.line(margin + colCant + colTipo, currentY, margin + colCant + colTipo, currentY + tableHeight);
+  doc.line(margin + colCant + colTipo + colModSer, currentY, margin + colCant + colTipo + colModSer, currentY + tableHeight);
+  doc.line(margin + colCant + colTipo + colModSer + colMarca, currentY, margin + colCant + colTipo + colModSer + colMarca, currentY + tableHeight);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  for (let i = 0; i < totalFilas; i++) {
+    const yRow = currentY + (i * rowHeight);
+    if (i > 0) {
+      doc.line(margin, yRow, margin + colCant + colTipo + colModSer + colMarca, yRow);
+    }
+
+    const item = items[i];
+    if (item) {
+      doc.text(String(item.cantidad || 1), margin + colCant / 2, yRow + 4.8, { align: 'center' });
+      doc.text(item.tipo_equipo || 'Laptop', margin + colCant + 3, yRow + 4.8);
+      doc.text(item.modelo_serial || '', margin + colCant + colTipo + 3, yRow + 4.8, { maxWidth: colModSer - 6 });
+      doc.text(item.marca || '', margin + colCant + colTipo + colModSer + 3, yRow + 4.8, { maxWidth: colMarca - 6 });
+    }
+  }
+
+  if (salidaData.direccion_resguardo) {
+    doc.text(salidaData.direccion_resguardo, margin + colCant + colTipo + colModSer + colMarca + 3, currentY + 5.5, {
+      maxWidth: colDir - 6,
+      leading: 4
+    });
+  }
+
+  currentY += tableHeight;
+
+  // SECCIÓN OBSERVACIONES
+  const obsHeight = 20;
+  doc.rect(margin, currentY, contentWidth, obsHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('OBSERVACIONES:', margin + 3, currentY + 4.8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const obsTexto = salidaData.observaciones || 'Sin observaciones particulares.';
+  doc.text(obsTexto, margin + 3, currentY + 9.5, { maxWidth: contentWidth - 6, leading: 4 });
+
+  currentY += obsHeight + 4;
+
+  // SECCIÓN FIRMAS
+  doc.setFillColor(245, 175, 0);
+  doc.rect(margin, currentY, contentWidth, 5.5, 'F');
+  doc.rect(margin, currentY, contentWidth, 5.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('Firmas', margin + (contentWidth / 2), currentY + 3.8, { align: 'center' });
+
+  currentY += 5.5;
+
+  const colFirmaW = contentWidth / 3;
+  const firmaBoxH = 25;
+
+  doc.rect(margin, currentY, contentWidth, firmaBoxH);
+  doc.line(margin + colFirmaW, currentY, margin + colFirmaW, currentY + firmaBoxH);
+  doc.line(margin + colFirmaW * 2, currentY, margin + colFirmaW * 2, currentY + firmaBoxH);
+
+  doc.line(margin, currentY + 5.5, margin + contentWidth, currentY + 5.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('Solicitante', margin + colFirmaW / 2, currentY + 4, { align: 'center' });
+  doc.text('Vo. Bo.', margin + colFirmaW + colFirmaW / 2, currentY + 4, { align: 'center' });
+  doc.text('Vo. Bo.', margin + colFirmaW * 2 + colFirmaW / 2, currentY + 4, { align: 'center' });
+
+  if (!opciones.firmaEnBlanco) {
+    if (salidaData.firma_empleado) {
+      try {
+        doc.addImage(salidaData.firma_empleado, 'PNG', margin + 20, currentY + 6.5, colFirmaW - 40, 13);
+      } catch (e) {}
+    }
+    if (salidaData.firma_jefe) {
+      try {
+        doc.addImage(salidaData.firma_jefe, 'PNG', margin + colFirmaW + 20, currentY + 6.5, colFirmaW - 40, 13);
+      } catch (e) {}
+    }
+    if (salidaData.firma_ti) {
+      try {
+        doc.addImage(salidaData.firma_ti, 'PNG', margin + colFirmaW * 2 + 20, currentY + 6.5, colFirmaW - 40, 13);
+      } catch (e) {}
+    }
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('Empleado', margin + colFirmaW / 2, currentY + 22.5, { align: 'center' });
+  doc.text('Gerente o Coordinador del area', margin + colFirmaW + colFirmaW / 2, currentY + 22.5, { align: 'center' });
+  doc.text('Area de Tecnologia de la Informacion', margin + colFirmaW * 2 + colFirmaW / 2, currentY + 22.5, { align: 'center' });
+
+  currentY += firmaBoxH + 5;
+
+  // LEYENDAS INFERIORES DE COPIAS
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Original TI', margin, currentY);
+  doc.text('Copia Vigilante', margin, currentY + 3.5);
+  doc.text('Copia Empleado', margin, currentY + 7);
+
+  const filename = `Solicitud_Salida_${(salidaData.solicitante_nombre || 'Equipo').replace(/\s+/g, '_')}_${fechaSol.replace(/\//g, '-')}.pdf`;
+  doc.save(filename);
+}
+
+/**
+ * Genera el PDF de Solicitud de Cuenta Microsoft 365 (Formato SGI R1TI4 - Horizontal Landscape)
+ */
+export function generarFormatoM365PDF(solicitudData, opciones = {}) {
+  const { firmaEnBlanco = false } = opciones;
+
+  const doc = new jsPDF({
+    orientation: 'l', // Horizontal / Landscape
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth(); // 297 mm
+  const pageHeight = doc.internal.pageSize.getHeight(); // 210 mm
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2; // 273 mm
+
+  // --- 1. ENCABEZADO OFICIAL SGI R1TI4 ---
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, 20);
+
+  // Líneas divisorias verticales
+  doc.line(margin + 50, margin, margin + 50, margin + 20);
+  doc.line(margin + 210, margin, margin + 210, margin + 20);
+  doc.line(margin + 245, margin, margin + 245, margin + 20);
+
+  // Logo ITZ OIL & GAS en Columna 1
+  try {
+    doc.addImage(LOGO_ITZ_BASE64, 'JPEG', margin + 3, margin + 2, 44, 16);
+  } catch (e) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('ITZ', margin + 10, margin + 10);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OIL & GAS', margin + 10, margin + 15);
+  }
+
+  // Título y Código en Columna 2
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('CÓDIGO', margin + 130, margin + 8, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text('R1TI4', margin + 130, margin + 15, { align: 'center' });
+
+  // Tabla lateral derecha (Sistema, Versión, Página)
+  doc.line(margin + 210, margin + 6.6, margin + contentWidth, margin + 6.6);
+  doc.line(margin + 210, margin + 13.3, margin + contentWidth, margin + 13.3);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema:', margin + 212, margin + 5);
+  doc.text('SGI', margin + 248, margin + 5);
+
+  doc.text('Versión:', margin + 212, margin + 11.5);
+  doc.text('00', margin + 248, margin + 11.5);
+
+  doc.text('Página:', margin + 212, margin + 18);
+  doc.text('1 de 1', margin + 248, margin + 18);
+
+  // --- 2. BARRA AMARILLA DE TÍTULO ---
+  let currentY = margin + 20;
+  doc.setFillColor(245, 175, 0); // Amarillo ITZ
+  doc.rect(margin, currentY, contentWidth, 10, 'F');
+  doc.rect(margin, currentY, contentWidth, 10, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('SOLICITUD DE CUENTA M365 (USUARIO INTERNO)', margin + (contentWidth / 2), currentY + 4.2, { align: 'center' });
+  doc.setFontSize(8.5);
+  doc.text('DEPARTAMENTO DE TECNOLOGÍAS DE LA INFORMACIÓN', margin + (contentWidth / 2), currentY + 8.2, { align: 'center' });
+
+  currentY += 10;
+
+  // --- 3. SECCIÓN SOLICITANTE Y METADATOS ---
+  const rowH = 6.5;
+  const colMidX = margin + 160;
+
+  // 3 Filas de Metadatos
+  doc.rect(margin, currentY, contentWidth, rowH * 3);
+  doc.line(margin, currentY + rowH, margin + contentWidth, currentY + rowH);
+  doc.line(margin, currentY + rowH * 2, margin + contentWidth, currentY + rowH * 2);
+  doc.line(colMidX, currentY, colMidX, currentY + rowH * 3);
+
+  // Formatear Fecha
+  let fechaSol = '';
+  if (solicitudData.fecha_solicitud) {
+    const fObj = new Date(solicitudData.fecha_solicitud);
+    fechaSol = !isNaN(fObj.getTime()) ? fObj.toLocaleDateString('es-MX') : String(solicitudData.fecha_solicitud);
+  } else {
+    fechaSol = new Date().toLocaleDateString('es-MX');
+  }
+
+  doc.setFontSize(8);
+
+  // Fila 1
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nombre del solicitante:', margin + 3, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(solicitudData.solicitante_nombre || '', margin + 40, currentY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('N°de Orden:', colMidX + 3, currentY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(solicitudData.no_orden || '', colMidX + 35, currentY + 4.5);
+
+  // Fila 2
+  doc.setFont('helvetica', 'bold');
+  doc.text('Area solicitante:', margin + 3, currentY + rowH + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(solicitudData.area_solicitante || 'General', margin + 40, currentY + rowH + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Fecha de solicitud:', colMidX + 3, currentY + rowH + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(fechaSol, colMidX + 35, currentY + rowH + 4.5);
+
+  // Fila 3
+  doc.setFont('helvetica', 'bold');
+  doc.text('E-mail:', margin + 3, currentY + rowH * 2 + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(solicitudData.solicitante_email || '', margin + 40, currentY + rowH * 2 + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nombre del proyecto:', colMidX + 3, currentY + rowH * 2 + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(solicitudData.nombre_proyecto || 'ITZ OIL & GAS', colMidX + 35, currentY + rowH * 2 + 4.5);
+
+  currentY += rowH * 3;
+
+  // --- 4. BARRA MORADA/GRIS: Requerimiento de Cuenta Microsoft ---
+  doc.setFillColor(230, 225, 240);
+  doc.rect(margin, currentY, contentWidth, 6, 'F');
+  doc.rect(margin, currentY, contentWidth, 6, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('Requerimiento de Cuenta Microsoft', margin + (contentWidth / 2), currentY + 4.2, { align: 'center' });
+
+  currentY += 6;
+
+  // --- 5. TABLA DETALLE DE LICENCIA Y EMPLEADO ---
+  const reqRows = [
+    { label: 'Tipo de Licencia Microsoft 365', val: solicitudData.tipo_licencia || 'Microsoft Business Standard', bold: true },
+    { label: 'Nombre Completo', val: solicitudData.nombre_completo || '' },
+    { label: 'Puesto', val: solicitudData.puesto || '' },
+    { label: 'Departamento', val: solicitudData.departamento || '' },
+    { label: 'Correo Sugerido:', val: solicitudData.correo_sugerido || '' },
+    { label: 'Jefe Directo', val: solicitudData.jefe_directo || solicitudData.solicitante_nombre || '' },
+    { label: 'Ciudad', val: solicitudData.ciudad || 'San Francisco de Campeche, campeche' },
+    { label: 'Número Telefónico de la empresa', val: solicitudData.telefono_empresa || '' },
+    { label: 'Correo Sugerido:', val: solicitudData.correo_sugerido || '' }
+  ];
+
+  const colLabelW = 85;
+
+  reqRows.forEach((r) => {
+    doc.rect(margin, currentY, contentWidth, rowH);
+    doc.line(margin + colLabelW, currentY, margin + colLabelW, currentY + rowH);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text(r.label, margin + 3, currentY + 4.5);
+
+    doc.setFont('helvetica', r.bold ? 'bold' : 'normal');
+    doc.text(r.val, margin + colLabelW + 4, currentY + 4.5);
+
+    currentY += rowH;
+  });
+
+  currentY += 4;
+
+  // --- 6. SECCIÓN DE FIRMAS (3 COLUMNAS) ---
+  const firmaBoxH = 34;
+  const colFirmaW = contentWidth / 3;
+
+  doc.rect(margin, currentY, contentWidth, firmaBoxH);
+  // Encabezado gris/lavanda de firmas
+  doc.setFillColor(235, 240, 245);
+  doc.rect(margin, currentY, contentWidth, 6, 'F');
+  doc.rect(margin, currentY, contentWidth, 6, 'S');
+
+  // Líneas divisorias de columnas
+  doc.line(margin + colFirmaW, currentY, margin + colFirmaW, currentY + firmaBoxH);
+  doc.line(margin + colFirmaW * 2, currentY, margin + colFirmaW * 2, currentY + firmaBoxH);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('COORDINADOR DEL ÁREA QUE SOLICITA', margin + colFirmaW / 2, currentY + 4.2, { align: 'center' });
+  doc.text('SOLICITANTE', margin + colFirmaW + colFirmaW / 2, currentY + 4.2, { align: 'center' });
+  doc.text('COORDINADOR TI', margin + colFirmaW * 2 + colFirmaW / 2, currentY + 4.2, { align: 'center' });
+
+  // Renderizar Firmas Digitales si existen y no es firma en blanco
+  if (!firmaEnBlanco) {
+    if (solicitudData.firma_solicitante) {
+      try {
+        doc.addImage(solicitudData.firma_solicitante, 'PNG', margin + 15, currentY + 7, colFirmaW - 30, 16);
+      } catch (e) {}
+    }
+    if (solicitudData.firma_empleado) {
+      try {
+        doc.addImage(solicitudData.firma_empleado, 'PNG', margin + colFirmaW + 15, currentY + 7, colFirmaW - 30, 16);
+      } catch (e) {}
+    }
+    if (solicitudData.firma_ti) {
+      try {
+        doc.addImage(solicitudData.firma_ti, 'PNG', margin + colFirmaW * 2 + 15, currentY + 7, colFirmaW - 30, 16);
+      } catch (e) {}
+    }
+  }
+
+  // Nombres y cargos debajo de la firma
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(solicitudData.solicitante_nombre || 'Jefe / Coordinador de Área', margin + colFirmaW / 2, currentY + 28, { align: 'center' });
+  doc.text(solicitudData.nombre_completo || 'Empleado Solicitante', margin + colFirmaW + colFirmaW / 2, currentY + 28, { align: 'center' });
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  doc.text('Aceptado y firmado', margin + colFirmaW * 2 + colFirmaW / 2, currentY + 24, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(solicitudData.coordinador_ti || 'Alejandro del Carmen Huchin Aban', margin + colFirmaW * 2 + colFirmaW / 2, currentY + 28, { align: 'center' });
+
+  const filename = `Solicitud_Cuenta_M365_${(solicitudData.no_orden || 'R1TI4').replace(/\s+/g, '_')}_${fechaSol.replace(/\//g, '-')}.pdf`;
+  doc.save(filename);
+}
+
+
+

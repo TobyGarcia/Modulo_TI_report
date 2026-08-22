@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Trash2, Shield, X, Save, AlertCircle } from 'lucide-react';
+import Pagination from './Pagination';
 
 export default function UserManagement({ token, currentUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -22,7 +25,8 @@ export default function UserManagement({ token, currentUser }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al cargar usuarios');
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
+      setCurrentPage(1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -33,6 +37,9 @@ export default function UserManagement({ token, currentUser }) {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const totalPages = Math.ceil(users.length / pageSize) || 1;
+  const currentUsers = users.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -113,51 +120,60 @@ export default function UserManagement({ token, currentUser }) {
             Cargando usuarios...
           </div>
         ) : (
-          <table className="w-full text-left text-sm text-gray-700">
-            <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
-              <tr>
-                <th className="p-4">ID</th>
-                <th className="p-4">Nombre Completo</th>
-                <th className="p-4">Usuario</th>
-                <th className="p-4">Rol</th>
-                <th className="p-4">Fecha de Creación</th>
-                <th className="p-4 text-center">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-gray-50 transition">
-                  <td className="p-4 font-mono text-gray-400 font-bold">#{u.id}</td>
-                  <td className="p-4 font-semibold text-gray-900">{u.nombre}</td>
-                  <td className="p-4 font-mono font-medium text-indigo-900">{u.username}</td>
-                  <td className="p-4">
-                    <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                      <Shield className="w-3 h-3" />
-                      <span className="uppercase">{u.role}</span>
-                    </span>
-                  </td>
-                  <td className="p-4 text-xs text-gray-500">
-                    {new Date(u.created_at).toLocaleDateString('es-ES')}
-                  </td>
-                  <td className="p-4 text-center">
-                    {currentUser?.id !== u.id ? (
-                      <button
-                        onClick={() => handleDeleteUser(u.id, u.username)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Eliminar usuario"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <span className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                        Sesión Activa
-                      </span>
-                    )}
-                  </td>
+          <>
+            <table className="w-full text-left text-sm text-gray-700">
+              <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
+                <tr>
+                  <th className="p-4">ID</th>
+                  <th className="p-4">Nombre Completo</th>
+                  <th className="p-4">Usuario</th>
+                  <th className="p-4">Rol</th>
+                  <th className="p-4">Fecha de Creación</th>
+                  <th className="p-4 text-center">Acción</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {currentUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-gray-50 transition">
+                    <td className="p-4 font-mono text-gray-400 font-bold">#{u.id}</td>
+                    <td className="p-4 font-semibold text-gray-900">{u.nombre}</td>
+                    <td className="p-4 font-mono font-medium text-indigo-900">{u.username}</td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                        <Shield className="w-3 h-3" />
+                        <span className="uppercase">{u.role}</span>
+                      </span>
+                    </td>
+                    <td className="p-4 text-xs text-gray-500">
+                      {new Date(u.created_at).toLocaleDateString('es-ES')}
+                    </td>
+                    <td className="p-4 text-center">
+                      {currentUser?.id !== u.id ? (
+                        <button
+                          onClick={() => handleDeleteUser(u.id, u.username)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Eliminar usuario"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+                          Sesión Activa
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={users.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
+          </>
         )}
       </div>
 

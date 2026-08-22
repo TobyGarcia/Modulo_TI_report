@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FileCheck, X, Check, Laptop, Camera, Trash2, ShieldCheck, Search } from 'lucide-react';
+import { FileCheck, X, Check, Laptop, Camera, Trash2, ShieldCheck, Search, Upload } from 'lucide-react';
 import SignatureCanvas from './SignatureCanvas';
+
+// Helper seguro para guardar borradores en localStorage omitiendo datos pesados Base64
+const saveLightDraft = (key, data) => {
+  if (!key) return;
+  try {
+    const { imagenes_evidencia, firma_responsable, firma_tecnico, ...textOnly } = data;
+    localStorage.setItem(key, JSON.stringify(textOnly));
+  } catch (err) {
+    try {
+      // Si la memoria localStorage se llenó por residuos, vaciar únicamente borradores viejos
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('draft_report_')) localStorage.removeItem(k);
+      });
+    } catch (e) {}
+  }
+};
 
 export default function MaintenanceReportModal({
   isOpen,
@@ -11,7 +27,8 @@ export default function MaintenanceReportModal({
   currentUser,
   existingMaintenance = null
 }) {
-  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   const [selectedEq, setSelectedEq] = useState(equipment);
   const [eqSearchFilter, setEqSearchFilter] = useState('');
@@ -60,7 +77,17 @@ export default function MaintenanceReportModal({
     }
 
     if (savedDraft) {
-      setFormData(savedDraft);
+      setFormData(prev => ({
+        ...prev,
+        ...savedDraft,
+        id: existingMaintenance?.id || savedDraft.id || null,
+        equipo_id: activeEq.id,
+        imagenes_evidencia: existingMaintenance?.imagenes_evidencia
+          ? (typeof existingMaintenance.imagenes_evidencia === 'string'
+            ? JSON.parse(existingMaintenance.imagenes_evidencia)
+            : existingMaintenance.imagenes_evidencia)
+          : (prev.imagenes_evidencia || [])
+      }));
     } else {
       setFormData({
         id: existingMaintenance?.id || null,
@@ -148,14 +175,12 @@ export default function MaintenanceReportModal({
     }
   };
 
-  // Helper seguro para actualizar formData y guardar en localStorage sin provovar re-renders masivos
+  // Helper seguro para actualizar formData
   const updateFormField = (field, value) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
       if (isOpen && DRAFT_KEY) {
-        try {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-        } catch (err) {}
+        saveLightDraft(DRAFT_KEY, next);
       }
       return next;
     });
@@ -170,70 +195,98 @@ export default function MaintenanceReportModal({
     onClose();
   };
 
-  // Manejo de carga e imágen comprimida base64 (Optimizado para memoria RAM móvil y localStorage)
-  const handleImageCapture = (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-
-    setUploadingImage(true);
-
-    files.forEach((file) => {
+  // Procesamiento altamente compatible con móviles usando FileReader
+  const processSingleFile = (file) => {
+    return new Promise((resolve) => {
+      if (!file) {
+        resolve(null);
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onerror = (err) => {
+        console.error('Error al leer archivo en FileReader:', err);
+        resolve(null);
+      };
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        if (!dataUrl) {
+          resolve(null);
+          return;
+        }
+
         const img = new Image();
-        img.onload = () => {
-          const maxDim = 600; // Dimensión optimizada para móviles (reduce uso de RAM en ~85%)
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height && width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Compresión liviana JPEG a 0.6 (~40KB a 60KB por fotografía)
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-
-          // Liberar recursos de memoria del lienzo canvas inmediatamente
-          img.onload = null;
-          canvas.width = 0;
-          canvas.height = 0;
-
-          setFormData((prev) => {
-            const nextImgs = [...prev.imagenes_evidencia, compressedBase64];
-            const updated = { ...prev, imagenes_evidencia: nextImgs };
-
-            // Guardado seguro en localStorage a prueba de QuotaExceededError ("Memoria insuficiente")
-            if (DRAFT_KEY) {
-              try {
-                localStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
-              } catch (quotaErr) {
-                // Si la memoria de localStorage se llena, guardar borrador conservando campos de texto
-                try {
-                  const lightDraft = { ...updated, imagenes_evidencia: [] };
-                  localStorage.setItem(DRAFT_KEY, JSON.stringify(lightDraft));
-                } catch (e) {}
-              }
-            }
-            return updated;
-          });
-          setUploadingImage(false);
+        img.onerror = (err) => {
+          console.error('Error al cargar imagen en objeto Image:', err);
+          resolve(dataUrl); // Retornar dataUrl original si falla el objeto Image
         };
-        img.src = event.target.result;
+        img.onload = () => {
+          try {
+            const maxDim = 600;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height && width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressed = canvas.toDataURL('image/jpeg', 0.55);
+            img.onload = null;
+            img.onerror = null;
+            canvas.width = 0;
+            canvas.height = 0;
+            resolve(compressed || dataUrl);
+          } catch (err) {
+            console.error('Error al comprimir en canvas:', err);
+            resolve(dataUrl);
+          }
+        };
+        img.src = dataUrl;
       };
       reader.readAsDataURL(file);
     });
+  };
 
-    e.target.value = '';
+  const handleImageCapture = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setUploadingImage(true);
+    try {
+      const compressedResults = [];
+      for (const file of files) {
+        const result = await processSingleFile(file);
+        if (result) compressedResults.push(result);
+      }
+
+      if (compressedResults.length > 0) {
+        setFormData((prev) => {
+          const nextImgs = [...prev.imagenes_evidencia, ...compressedResults];
+          const updated = { ...prev, imagenes_evidencia: nextImgs };
+          if (DRAFT_KEY) {
+            saveLightDraft(DRAFT_KEY, updated);
+          }
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error('Error al procesar imágenes de evidencia:', err);
+    } finally {
+      setUploadingImage(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const removeImage = (index) => {
@@ -241,14 +294,7 @@ export default function MaintenanceReportModal({
       const nextImgs = prev.imagenes_evidencia.filter((_, i) => i !== index);
       const updated = { ...prev, imagenes_evidencia: nextImgs };
       if (DRAFT_KEY) {
-        try {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
-        } catch (e) {
-          try {
-            const lightDraft = { ...updated, imagenes_evidencia: [] };
-            localStorage.setItem(DRAFT_KEY, JSON.stringify(lightDraft));
-          } catch (err) {}
-        }
+        saveLightDraft(DRAFT_KEY, updated);
       }
       return updated;
     });
@@ -508,34 +554,35 @@ export default function MaintenanceReportModal({
 
           {/* Fotos de Evidencia */}
           <div className="border rounded-xl p-3 bg-gray-50 space-y-2">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-2">
               <span className="text-xs font-bold text-gray-700 flex items-center space-x-1">
                 <Camera className="w-4 h-4 text-indigo-600" />
                 <span>Imágenes de Prueba / Evidencias ({formData.imagenes_evidencia.length})</span>
               </span>
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 flex items-center space-x-1 transition-colors"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>Tomar / Agregar Foto</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-600 flex items-center space-x-1 shadow-sm transition-colors"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Tomar Foto (Cámara)</span>
+                </button>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                onChange={handleImageCapture}
-                className="hidden"
-              />
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 flex items-center space-x-1 transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Galería / Archivos</span>
+                </button>
+              </div>
             </div>
 
             {uploadingImage && (
-              <p className="text-[11px] text-indigo-600 animate-pulse font-medium">Procesando y optimizando imagen...</p>
+              <p className="text-[11px] text-indigo-600 animate-pulse font-medium">Procesando y optimizando imagen de evidencia...</p>
             )}
 
             {formData.imagenes_evidencia.length > 0 && (
@@ -620,6 +667,25 @@ export default function MaintenanceReportModal({
             </button>
           </div>
         </form>
+
+        {/* Inputs de captura de archivo fuera del formulario para inmunidad absoluta contra submit indeseados */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageCapture}
+          className="hidden"
+        />
+
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageCapture}
+          className="hidden"
+        />
       </div>
     </div>
   );

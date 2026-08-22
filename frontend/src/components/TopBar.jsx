@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Users, LogOut, UserCheck, ClipboardList, UserPlus } from 'lucide-react';
+import { Monitor, Users, LogOut, UserCheck, ClipboardList, UserPlus, ExternalLink, Mail } from 'lucide-react';
 
 export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
   return (
@@ -52,6 +52,30 @@ export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
           >
             <ClipboardList className="w-4 h-4" />
             <span>Bitácora & Agenda</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('salidas')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              activeTab === 'salidas'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
+            }`}
+          >
+            <ExternalLink className="w-4 h-4 text-amber-300" />
+            <span>Salidas Equipos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('m365')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              activeTab === 'm365'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
+            }`}
+          >
+            <Mail className="w-4 h-4 text-blue-300" />
+            <span>Cuentas M365</span>
           </button>
 
           <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check } from 'lucide-react';
+import Pagination from './Pagination';
 
 export default function EmployeeManagement({ token }) {
   const [employees, setEmployees] = useState([]);
@@ -7,6 +8,8 @@ export default function EmployeeManagement({ token }) {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -30,6 +33,7 @@ export default function EmployeeManagement({ token }) {
       if (res.ok) {
         const data = await res.json();
         setEmployees(Array.isArray(data) ? data : []);
+        setCurrentPage(1);
       }
     } catch (err) {
       console.error('Error al obtener empleados:', err);
@@ -47,6 +51,9 @@ export default function EmployeeManagement({ token }) {
     setSearch(val);
     fetchEmployees(val);
   };
+
+  const totalPages = Math.ceil(employees.length / pageSize) || 1;
+  const currentEmployees = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleOpenAddModal = () => {
     setEditingEmployee(null);
@@ -212,7 +219,7 @@ export default function EmployeeManagement({ token }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {employees.map((emp) => (
+                {currentEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-indigo-50/40 transition">
                     <td className="p-4 font-semibold text-gray-900">
                       <div className="flex items-center space-x-2">
@@ -260,6 +267,13 @@ export default function EmployeeManagement({ token }) {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={employees.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>
