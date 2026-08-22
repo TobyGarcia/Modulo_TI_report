@@ -4,6 +4,96 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+async function ensureTablesExist(dbClient) {
+  try {
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS empleados (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        no_empleado VARCHAR(50),
+        empresa VARCHAR(100),
+        area VARCHAR(100),
+        puesto VARCHAR(100),
+        email VARCHAR(100),
+        estado VARCHAR(20) DEFAULT 'activo',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS estados_equipo (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(50) UNIQUE NOT NULL,
+        descripcion TEXT
+      );
+      INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
+      (1, 'Resguardo', 'Equipo en resguardo sin personal asignado'),
+      (2, 'Asignado', 'Equipo actualmente asignado a un empleado'),
+      (3, 'Mantenimiento', 'Equipo en proceso de mantenimiento o reparación'),
+      (4, 'Baja', 'Equipo dado de baja')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    await dbClient.query(`
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL;
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS estado_id INT REFERENCES estados_equipo(id) DEFAULT 1;
+    `);
+
+    // Tabla principal asignaciones
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS asignaciones (
+        id SERIAL PRIMARY KEY,
+        equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        tipo_movimiento VARCHAR(30) NOT NULL,
+        motivo TEXT,
+        fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        observaciones TEXT,
+        firma_empleado TEXT,
+        firma_ti TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Tabla historial_asignaciones para compatibilidad
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS historial_asignaciones (
+        id SERIAL PRIMARY KEY,
+        equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        tipo_movimiento VARCHAR(30) NOT NULL,
+        motivo TEXT,
+        fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        observaciones TEXT,
+        firma_empleado TEXT,
+        firma_ti TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Poblar automáticamente registros iniciales de asignación si la tabla asignaciones está vacía pero hay equipos asignados
+    await dbClient.query(`
+      INSERT INTO asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, observaciones)
+      SELECT e.id, e.empleado_id, 'asignacion', 'Asignación de equipo', COALESCE(e.observaciones, 'Registro de equipo asignado a ' || e.personal_asignado)
+      FROM equipos e
+      WHERE e.empleado_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM asignaciones a WHERE a.equipo_id = e.id);
+    `);
+
+    await dbClient.query(`
+      INSERT INTO historial_asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, observaciones)
+      SELECT a.equipo_id, a.empleado_id, a.tipo_movimiento, a.motivo, a.observaciones
+      FROM asignaciones a
+      WHERE NOT EXISTS (SELECT 1 FROM historial_asignaciones h WHERE h.equipo_id = a.equipo_id AND h.fecha_movimiento = a.fecha_movimiento);
+    `);
+  } catch (e) {
+    console.error('Error al verificar tablas de asignaciones en la base de datos:', e);
+  }
+}
+
 // Asignar equipo a un empleado (Protegido)
 router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
   const client = await pool.connect();
@@ -15,6 +105,7 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Debe especificar el ID del empleado a asignar' });
     }
 
+    await ensureTablesExist(client);
     await client.query('BEGIN');
 
     // Verificar empleado
@@ -51,20 +142,36 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
     }
 
     const equipoActualizado = eqRes.rows[0];
+    const motivoTxt = 'Asignación de equipo';
+    const obsTxt = observaciones || 'Entrega de equipo de cómputo y accesorios';
 
-    // Registrar en historial_asignaciones
-    const histQuery = `
-      INSERT INTO historial_asignaciones (
+    // Registrar en tabla asignaciones y en historial_asignaciones
+    const insertSql = `
+      INSERT INTO asignaciones (
         equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
       ) VALUES ($1, $2, 'asignacion', $3, $4, $5, $6, $7)
       RETURNING *;
     `;
-    const histRes = await client.query(histQuery, [
+    const histRes = await client.query(insertSql, [
       id,
       empleado.id,
-      'Asignación de equipo',
+      motivoTxt,
       req.user ? req.user.id : null,
-      observaciones || 'Entrega de equipo de cómputo y accesorios',
+      obsTxt,
+      firma_empleado || null,
+      firma_ti || null
+    ]);
+
+    await client.query(`
+      INSERT INTO historial_asignaciones (
+        equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
+      ) VALUES ($1, $2, 'asignacion', $3, $4, $5, $6, $7)
+    `, [
+      id,
+      empleado.id,
+      motivoTxt,
+      req.user ? req.user.id : null,
+      obsTxt,
       firma_empleado || null,
       firma_ti || null
     ]);
@@ -93,6 +200,7 @@ router.post('/equipos/:id/desasignar', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { motivo, observaciones, firma_empleado, firma_ti } = req.body;
 
+    await ensureTablesExist(client);
     await client.query('BEGIN');
 
     // Consultar equipo actual
@@ -105,7 +213,6 @@ router.post('/equipos/:id/desasignar', authenticateToken, async (req, res) => {
     const equipoActual = eqCheck.rows[0];
     const empleadoIdAnterior = equipoActual.empleado_id;
 
-    // Obtener datos del empleado anterior para el reporte PDF si existía
     let empleadoAnterior = null;
     if (empleadoIdAnterior) {
       const empRes = await client.query('SELECT * FROM empleados WHERE id = $1', [empleadoIdAnterior]);
@@ -128,20 +235,35 @@ router.post('/equipos/:id/desasignar', authenticateToken, async (req, res) => {
     const equipoActualizado = eqRes.rows[0];
 
     const motivoFinal = motivo || 'Cambio de equipo';
+    const obsTxt = observaciones || 'Devolución de equipo a resguardo';
 
-    // Registrar en historial_asignaciones
-    const histQuery = `
-      INSERT INTO historial_asignaciones (
+    // Registrar en asignaciones e historial_asignaciones
+    const insertSql = `
+      INSERT INTO asignaciones (
         equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
       ) VALUES ($1, $2, 'desasignacion', $3, $4, $5, $6, $7)
       RETURNING *;
     `;
-    const histRes = await client.query(histQuery, [
+    const histRes = await client.query(insertSql, [
       id,
       empleadoIdAnterior,
       motivoFinal,
       req.user ? req.user.id : null,
-      observaciones || 'Devolución de equipo a resguardo',
+      obsTxt,
+      firma_empleado || null,
+      firma_ti || null
+    ]);
+
+    await client.query(`
+      INSERT INTO historial_asignaciones (
+        equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
+      ) VALUES ($1, $2, 'desasignacion', $3, $4, $5, $6, $7)
+    `, [
+      id,
+      empleadoIdAnterior,
+      motivoFinal,
+      req.user ? req.user.id : null,
+      obsTxt,
       firma_empleado || null,
       firma_ti || null
     ]);
@@ -175,6 +297,7 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Debe especificar el nuevo empleado a asignar' });
     }
 
+    await ensureTablesExist(client);
     await client.query('BEGIN');
 
     // 1. Obtener equipo y empleado anterior
@@ -202,6 +325,21 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
 
     // 3. Registrar desasignación previa si tenía empleado
     if (empleadoIdAnterior) {
+      const motivoDes = motivo_desasignacion || 'Cambio de equipo / Reasignación';
+      await client.query(
+        `INSERT INTO asignaciones (
+          equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
+        ) VALUES ($1, $2, 'desasignacion', $3, $4, $5, $6, $7)`,
+        [
+          id,
+          empleadoIdAnterior,
+          motivoDes,
+          req.user ? req.user.id : null,
+          'Desasignación por reasignación directa de equipo',
+          firma_empleado || null,
+          firma_ti || null
+        ]
+      );
       await client.query(
         `INSERT INTO historial_asignaciones (
           equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
@@ -209,7 +347,7 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
         [
           id,
           empleadoIdAnterior,
-          motivo_desasignacion || 'Cambio de equipo / Reasignación',
+          motivoDes,
           req.user ? req.user.id : null,
           'Desasignación por reasignación directa de equipo',
           firma_empleado || null,
@@ -240,8 +378,9 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
     const equipoActualizado = eqRes.rows[0];
 
     // 5. Registrar nueva asignación
+    const obsRe = observaciones || 'Reasignación de equipo a nuevo usuario';
     const histNew = await client.query(
-      `INSERT INTO historial_asignaciones (
+      `INSERT INTO asignaciones (
         equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
       ) VALUES ($1, $2, 'reasignacion', $3, $4, $5, $6, $7)
       RETURNING *;`,
@@ -250,7 +389,22 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
         nuevoEmpleado.id,
         'Reasignación de equipo',
         req.user ? req.user.id : null,
-        observaciones || 'Reasignación de equipo a nuevo usuario',
+        obsRe,
+        firma_empleado || null,
+        firma_ti || null
+      ]
+    );
+
+    await client.query(
+      `INSERT INTO historial_asignaciones (
+        equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones, firma_empleado, firma_ti
+      ) VALUES ($1, $2, 'reasignacion', $3, $4, $5, $6, $7)`,
+      [
+        id,
+        nuevoEmpleado.id,
+        'Reasignación de equipo',
+        req.user ? req.user.id : null,
+        obsRe,
         firma_empleado || null,
         firma_ti || null
       ]
@@ -277,16 +431,17 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
 // Obtener el historial global de todas las asignaciones y desasignaciones (Protegido)
 router.get('/historial', authenticateToken, async (req, res) => {
   try {
+    await ensureTablesExist(pool);
     const query = `
-      SELECT h.*, 
+      SELECT a.*, 
              eq.hostname, eq.serial, eq.marca, eq.modelo, eq.so, eq.cpu, eq.ram_capacidad, eq.disco_capacidad, eq.estado_fisico, eq.personal_asignado as equipo_personal_actual,
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa, emp.no_empleado,
              u.nombre as usuario_ti_nombre
-      FROM historial_asignaciones h
-      LEFT JOIN equipos eq ON h.equipo_id = eq.id
-      LEFT JOIN empleados emp ON h.empleado_id = emp.id
-      LEFT JOIN usuarios u ON h.usuario_id = u.id
-      ORDER BY h.fecha_movimiento DESC;
+      FROM asignaciones a
+      LEFT JOIN equipos eq ON a.equipo_id = eq.id
+      LEFT JOIN empleados emp ON a.empleado_id = emp.id
+      LEFT JOIN usuarios u ON a.usuario_id = u.id
+      ORDER BY a.fecha_movimiento DESC, a.id DESC;
     `;
     const result = await pool.query(query);
     res.json(result.rows);
@@ -300,17 +455,18 @@ router.get('/historial', authenticateToken, async (req, res) => {
 router.get('/equipos/:id/historial-asignaciones', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    await ensureTablesExist(pool);
     const query = `
-      SELECT h.*, 
+      SELECT a.*, 
              eq.hostname, eq.serial, eq.marca, eq.modelo, eq.so, eq.cpu, eq.ram_capacidad, eq.disco_capacidad, eq.estado_fisico,
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa,
              u.nombre as usuario_ti_nombre
-      FROM historial_asignaciones h
-      LEFT JOIN equipos eq ON h.equipo_id = eq.id
-      LEFT JOIN empleados emp ON h.empleado_id = emp.id
-      LEFT JOIN usuarios u ON h.usuario_id = u.id
-      WHERE h.equipo_id = $1
-      ORDER BY h.fecha_movimiento DESC;
+      FROM asignaciones a
+      LEFT JOIN equipos eq ON a.equipo_id = eq.id
+      LEFT JOIN empleados emp ON a.empleado_id = emp.id
+      LEFT JOIN usuarios u ON a.usuario_id = u.id
+      WHERE a.equipo_id = $1
+      ORDER BY a.fecha_movimiento DESC, a.id DESC;
     `;
     const result = await pool.query(query, [id]);
     res.json(result.rows);
@@ -321,4 +477,3 @@ router.get('/equipos/:id/historial-asignaciones', authenticateToken, async (req,
 });
 
 module.exports = router;
-

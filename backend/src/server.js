@@ -71,7 +71,6 @@ async function initDatabase() {
       );
     `);
 
-    // Insertar estados por defecto
     await pool.query(`
       INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
       (1, 'Resguardo', 'Equipo en resguardo sin personal asignado'),
@@ -122,7 +121,23 @@ async function initDatabase() {
       ALTER TABLE mantenimientos ADD COLUMN IF NOT EXISTS hora_programada VARCHAR(20) DEFAULT 'Pendiente';
     `);
 
-    // 6. Crear tabla de historial de asignaciones
+    // 6. Crear tabla asignaciones y tabla historial_asignaciones
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS asignaciones (
+        id SERIAL PRIMARY KEY,
+        equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        tipo_movimiento VARCHAR(30) NOT NULL,
+        motivo TEXT,
+        fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        observaciones TEXT,
+        firma_empleado TEXT,
+        firma_ti TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS historial_asignaciones (
         id SERIAL PRIMARY KEY,
@@ -167,7 +182,23 @@ async function initDatabase() {
       WHERE empleado_id IS NULL AND (estado_id IS NULL OR estado_id = 0);
     `);
 
-    // 8. Crear usuario admin si no existe
+    // 8. Auto-población de la tabla asignaciones para equipos que tienen empleado asignado y aún no están registrados en la tabla asignaciones
+    await pool.query(`
+      INSERT INTO asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, observaciones)
+      SELECT e.id, e.empleado_id, 'asignacion', 'Asignación de equipo', COALESCE(e.observaciones, 'Registro previo de equipo asignado a ' || e.personal_asignado)
+      FROM equipos e
+      WHERE e.empleado_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM asignaciones a WHERE a.equipo_id = e.id);
+    `);
+
+    await pool.query(`
+      INSERT INTO historial_asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, observaciones)
+      SELECT a.equipo_id, a.empleado_id, a.tipo_movimiento, a.motivo, a.observaciones
+      FROM asignaciones a
+      WHERE NOT EXISTS (SELECT 1 FROM historial_asignaciones h WHERE h.equipo_id = a.equipo_id AND h.fecha_movimiento = a.fecha_movimiento);
+    `);
+
+    // 9. Crear usuario admin si no existe
     const adminCheck = await pool.query("SELECT id FROM usuarios WHERE username = 'admin'");
     if (adminCheck.rows.length === 0) {
       const passwordHash = await bcrypt.hash('admin123', 10);

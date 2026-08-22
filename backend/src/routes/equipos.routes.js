@@ -310,7 +310,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Equipo no encontrado' });
     }
 
-    res.json(result.rows[0]);
+    const updatedEquipo = result.rows[0];
+
+    // Registrar en asignaciones si el equipo fue asignado a un empleado
+    if (targetEmpleadoId) {
+      try {
+        await pool.query(`
+          INSERT INTO asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones)
+          VALUES ($1, $2, 'asignacion', 'Asignación de equipo', $3, 'Actualización de inventario')
+        `, [id, targetEmpleadoId, req.user ? req.user.id : null]);
+        await pool.query(`
+          INSERT INTO historial_asignaciones (equipo_id, empleado_id, tipo_movimiento, motivo, usuario_id, observaciones)
+          VALUES ($1, $2, 'asignacion', 'Asignación de equipo', $3, 'Actualización de inventario')
+        `, [id, targetEmpleadoId, req.user ? req.user.id : null]);
+      } catch (e) {
+        console.error('Error al registrar en asignaciones desde PUT:', e);
+      }
+    }
+
+    res.json(updatedEquipo);
   } catch (err) {
     console.error('Error al actualizar equipo:', err);
     res.status(500).json({ error: 'Error al actualizar información del equipo' });

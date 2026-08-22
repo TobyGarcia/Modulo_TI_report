@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS mantenimientos (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla de Historial de Asignaciones y Movimientos
-CREATE TABLE IF NOT EXISTS historial_asignaciones (
+-- Tabla de Asignaciones (Histórico de Movimientos de Asignación, Desasignación y Reasignación)
+CREATE TABLE IF NOT EXISTS asignaciones (
     id SERIAL PRIMARY KEY,
     equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
     empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
@@ -116,10 +116,25 @@ CREATE TABLE IF NOT EXISTS historial_asignaciones (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla / Alias Historial de Asignaciones para compatibilidad
+CREATE TABLE IF NOT EXISTS historial_asignaciones (
+    id SERIAL PRIMARY KEY,
+    equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+    empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+    tipo_movimiento VARCHAR(30) NOT NULL,
+    motivo TEXT,
+    fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+    observaciones TEXT,
+    firma_empleado TEXT,
+    firma_ti TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Comentarios explicativos
 COMMENT ON TABLE empleados IS 'Tabla de empleados / personal para asignación de equipos';
-COMMENT ON TABLE estados_equipo IS 'Catálogo de estados de asignación de equipos (Resguardo, Asignado, Mantenimiento, Baja)';
+COMMENT ON TABLE estados_equipo IS 'Catálogo de estados de asignación de equipos';
 COMMENT ON TABLE equipos IS 'Tabla principal de inventario de equipos de cómputo y etiquetas QR';
 COMMENT ON TABLE usuarios IS 'Tabla de usuarios autenticados del sistema';
 COMMENT ON TABLE mantenimientos IS 'Tabla de programación, reportes individuales y bitácora de mantenimiento SGI';
-COMMENT ON TABLE historial_asignaciones IS 'Historial de asignaciones, desasignaciones y reasignaciones de equipos';
+COMMENT ON TABLE asignaciones IS 'Tabla principal de asignaciones, desasignaciones y reasignaciones de equipos';

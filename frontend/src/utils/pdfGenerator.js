@@ -580,8 +580,8 @@ export function generarFormatoAsignacionPDF(datosAsignacion, equipo, empleado) {
   currentY += 8;
 
   // TABLA PRINCIPAL: EQUIPO | MARCA/MODELO | STATUS
-  const col1W = 55;
-  const col2W = 70;
+  const col1W = 50;
+  const col2W = 80;
   const col3W = contentWidth - col1W - col2W;
 
   doc.setFillColor(240, 240, 240);
@@ -599,26 +599,31 @@ export function generarFormatoAsignacionPDF(datosAsignacion, equipo, empleado) {
 
   currentY += 7;
 
-  // Fila de datos
-  const equipoNombre = `${equipo.hostname || 'EQUIPO DE COMPUTO'}\nS/N: ${equipo.serial || 'N/A'}`;
-  const marcaModelo = `${equipo.marca || ''} ${equipo.modelo || ''}`.trim() || 'N/A';
-  const statusTxt = 'ASIGNADO';
+  // Fila de datos (Observación 3: Default "Laptop", Modelo/Marca/Serial en saltos de línea, Status = Estado Físico)
+  const rowHeight = 22;
+  doc.rect(margin, currentY, contentWidth, rowHeight);
+  doc.line(margin + col1W, currentY, margin + col1W, currentY + rowHeight);
+  doc.line(margin + col1W + col2W, currentY, margin + col1W + col2W, currentY + rowHeight);
 
-  doc.rect(margin, currentY, contentWidth, 16);
-  doc.line(margin + col1W, currentY, margin + col1W, currentY + 16);
-  doc.line(margin + col1W + col2W, currentY, margin + col1W + col2W, currentY + 16);
+  // Columna EQUIPO (Laptop por defecto)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Laptop', margin + col1W / 2, currentY + (rowHeight / 2) + 1.5, { align: 'center' });
 
+  // Columna MARCA/MODELO (Modelo, Marca, Serial con saltos de línea)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  const marcaModeloTexto = `Modelo: ${equipo.modelo || 'N/A'}\nMarca: ${equipo.marca || 'N/A'}\nSerial: ${equipo.serial || 'N/A'}`;
+  doc.text(marcaModeloTexto, margin + col1W + 4, currentY + 5.5, { maxWidth: col2W - 8, leading: 5 });
+
+  // Columna STATUS (Estado físico del equipo)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text(equipoNombre, margin + 3, currentY + 6, { maxWidth: col1W - 6 });
-  doc.setFont('helvetica', 'normal');
-  doc.text(marcaModelo, margin + col1W + 3, currentY + 8, { maxWidth: col2W - 6 });
-  doc.setFont('helvetica', 'bold');
   doc.setTextColor(16, 128, 64);
-  doc.text(statusTxt, margin + col1W + col2W + col3W / 2, currentY + 9, { align: 'center' });
+  doc.text((equipo.estado_fisico || 'Excelente').toUpperCase(), margin + col1W + col2W + col3W / 2, currentY + (rowHeight / 2) + 1.5, { align: 'center' });
   doc.setTextColor(0, 0, 0);
 
-  currentY += 16;
+  currentY += rowHeight;
 
   // SECCIÓN OBSERVACIONES & SPECS
   doc.setFillColor(240, 240, 240);
@@ -661,7 +666,7 @@ export function generarFormatoAsignacionPDF(datosAsignacion, equipo, empleado) {
 
   currentY += obsHeight + 10;
 
-  // LÁUSULA DE RESPONSABILIDAD
+  // CLÁUSULA DE RESPONSABILIDAD
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   const clausula = 'Acepto la responsabilidad de mantenerlo en las condiciones óptimas y hacerme cargo de su buen uso y funcionamiento, también asumo los descuentos que se pudieran generar y/o aplicarme por el mal uso.';
@@ -784,8 +789,8 @@ export function generarFormatoDesasignacionPDF(datosDesasignacion, equipo, emple
   currentY += 8;
 
   // TABLA PRINCIPAL: EQUIPO | MARCA/MODELO | MOTIVO DE DESASIGNACIÓN
-  const col1W = 55;
-  const col2W = 60;
+  const col1W = 50;
+  const col2W = 75;
   const col3W = contentWidth - col1W - col2W;
 
   doc.setFillColor(240, 240, 240);
@@ -803,28 +808,35 @@ export function generarFormatoDesasignacionPDF(datosDesasignacion, equipo, emple
 
   currentY += 7;
 
-  // Fila de datos
-  const equipoNombre = `${equipo.hostname || 'EQUIPO DE COMPUTO'}\nS/N: ${equipo.serial || 'N/A'}`;
-  const marcaModelo = `${equipo.marca || ''} ${equipo.modelo || ''}`.trim() || 'N/A';
+  // Fila de datos (Observación 3 & 4: Laptop por defecto, Modelo/Marca/Serial con saltos de línea)
+  const rowHeight = 22;
   const motivoTexto = (datosDesasignacion?.motivo || motivo || 'Cambio de equipo').toUpperCase();
 
-  doc.rect(margin, currentY, contentWidth, 16);
-  doc.line(margin + col1W, currentY, margin + col1W, currentY + 16);
-  doc.line(margin + col1W + col2W, currentY, margin + col1W + col2W, currentY + 16);
+  doc.rect(margin, currentY, contentWidth, rowHeight);
+  doc.line(margin + col1W, currentY, margin + col1W, currentY + rowHeight);
+  doc.line(margin + col1W + col2W, currentY, margin + col1W + col2W, currentY + rowHeight);
 
+  // Columna EQUIPO (Laptop por defecto)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text(equipoNombre, margin + 3, currentY + 6, { maxWidth: col1W - 6 });
+  doc.setFontSize(9);
+  doc.text('Laptop', margin + col1W / 2, currentY + (rowHeight / 2) + 1.5, { align: 'center' });
+
+  // Columna MARCA/MODELO (Modelo, Marca, Serial con saltos de línea)
   doc.setFont('helvetica', 'normal');
-  doc.text(marcaModelo, margin + col1W + 3, currentY + 8, { maxWidth: col2W - 6 });
+  doc.setFontSize(8.5);
+  const marcaModeloTexto = `Modelo: ${equipo.modelo || 'N/A'}\nMarca: ${equipo.marca || 'N/A'}\nSerial: ${equipo.serial || 'N/A'}`;
+  doc.text(marcaModeloTexto, margin + col1W + 4, currentY + 5.5, { maxWidth: col2W - 8, leading: 5 });
+
+  // Columna MOTIVO DESASIGNACIÓN
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
   doc.setTextColor(180, 40, 40);
   doc.text(motivoTexto, margin + col1W + col2W + 3, currentY + 8, { maxWidth: col3W - 6 });
   doc.setTextColor(0, 0, 0);
 
-  currentY += 16;
+  currentY += rowHeight;
 
-  // SECCIÓN OBSERVACIONES & ESTADO DE DEVOLUCIÓN
+  // SECCIÓN OBSERVACIONES & ESTADO DE DEVOLUCIÓN (Observación 4: Atributos separados por salto de línea)
   doc.setFillColor(240, 240, 240);
   doc.rect(margin, currentY, contentWidth, 6, 'F');
   doc.rect(margin, currentY, contentWidth, 6, 'S');
@@ -834,7 +846,7 @@ export function generarFormatoDesasignacionPDF(datosDesasignacion, equipo, emple
   doc.text('DETALLES DEL EQUIPO Y OBSERVACIONES DE ENTREGA', margin + (contentWidth / 2), currentY + 4.2, { align: 'center' });
 
   currentY += 6;
-  const obsHeight = 35;
+  const obsHeight = 45;
   doc.rect(margin, currentY, contentWidth, obsHeight);
 
   doc.setFont('helvetica', 'bold');
@@ -843,20 +855,36 @@ export function generarFormatoDesasignacionPDF(datosDesasignacion, equipo, emple
   doc.setFont('helvetica', 'normal');
   doc.text(`${empleado?.nombre || equipo.personal_asignado || 'No registrado'} (${empleado?.area || equipo.area || 'N/A'})`, margin + 42, currentY + 6);
 
+  // Atributos de especificaciones en líneas separadas
   doc.setFont('helvetica', 'bold');
-  doc.text('ESPECIFICACIONES:', margin + 3, currentY + 12);
+  doc.text('SO:', margin + 3, currentY + 12);
   doc.setFont('helvetica', 'normal');
-  doc.text(`SO: ${equipo.so || 'N/A'} | CPU: ${equipo.cpu || 'N/A'} | RAM: ${equipo.ram_capacidad || 'N/A'} | Disc: ${equipo.disco_capacidad || 'N/A'}`, margin + 42, currentY + 12);
+  doc.text(equipo.so || 'N/A', margin + 42, currentY + 12);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('ESTADO FÍSICO:', margin + 3, currentY + 18);
+  doc.text('CPU:', margin + 3, currentY + 18);
   doc.setFont('helvetica', 'normal');
-  doc.text(equipo.estado_fisico || 'Bueno', margin + 42, currentY + 18);
+  doc.text(equipo.cpu || 'N/A', margin + 42, currentY + 18);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('NOTAS TI:', margin + 3, currentY + 24);
+  doc.text('RAM:', margin + 3, currentY + 24);
   doc.setFont('helvetica', 'normal');
-  doc.text(datosDesasignacion?.observaciones || 'Se recibe equipo en resguardo.', margin + 42, currentY + 24, { maxWidth: contentWidth - 46 });
+  doc.text(equipo.ram_capacidad || 'N/A', margin + 42, currentY + 24);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('STORAGE:', margin + 3, currentY + 30);
+  doc.setFont('helvetica', 'normal');
+  doc.text(equipo.disco_capacidad || 'N/A', margin + 42, currentY + 30);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('ESTADO FÍSICO:', margin + 3, currentY + 36);
+  doc.setFont('helvetica', 'normal');
+  doc.text(equipo.estado_fisico || 'Bueno', margin + 42, currentY + 36);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('NOTAS TI:', margin + 3, currentY + 42);
+  doc.setFont('helvetica', 'normal');
+  doc.text(datosDesasignacion?.observaciones || 'Se recibe equipo en resguardo.', margin + 42, currentY + 42, { maxWidth: contentWidth - 46 });
 
   currentY += obsHeight + 10;
 
