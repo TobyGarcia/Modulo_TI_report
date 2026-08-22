@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { LOGO_ITZ_BASE64 } from './logoBase64';
 
 /**
  * Genera el PDF del Reporte de Mantenimiento de Equipo de Cómputo (Formato SGI R2PTI1)
@@ -24,13 +25,17 @@ export function generarReportePDF(mantenimiento, equipo) {
   doc.line(margin + 135, margin, margin + 135, margin + 22);
   doc.line(margin + 160, margin, margin + 160, margin + 22);
 
-  // Logo / Nombre Empresa en Columna 1
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('ITZ', margin + 8, margin + 11);
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.text('OIL & GAS', margin + 8, margin + 16);
+  // Logo Oficial ITZ OIL & GAS en Columna 1
+  try {
+    doc.addImage(LOGO_ITZ_BASE64, 'JPEG', margin + 2.5, margin + 2.5, 40, 17);
+  } catch (e) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('ITZ', margin + 8, margin + 11);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OIL & GAS', margin + 8, margin + 16);
+  }
 
   // Título y Código en Columna 2
   doc.setFont('helvetica', 'bold');
@@ -358,12 +363,17 @@ export function generarBitacoraPDF(mantenimientos, tituloFiltro = "BITACORA DE M
   doc.line(margin + 210, margin, margin + 210, margin + 22);
   doc.line(margin + 245, margin, margin + 245, margin + 22);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('ITZ', margin + 10, margin + 11);
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.text('OIL & GAS', margin + 10, margin + 16);
+  // Logo Oficial ITZ OIL & GAS en Columna 1
+  try {
+    doc.addImage(LOGO_ITZ_BASE64, 'JPEG', margin + 3, margin + 2.5, 44, 17);
+  } catch (e) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('ITZ', margin + 10, margin + 11);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OIL & GAS', margin + 10, margin + 16);
+  }
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
