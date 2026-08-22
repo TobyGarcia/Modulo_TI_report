@@ -7,6 +7,8 @@ const equiposRoutes = require('./routes/equipos.routes');
 const authRoutes = require('./routes/auth.routes');
 const usuariosRoutes = require('./routes/usuarios.routes');
 const mantenimientosRoutes = require('./routes/mantenimientos.routes');
+const empleadosRoutes = require('./routes/empleados.routes');
+const asignacionesRoutes = require('./routes/asignaciones.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +23,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/equipos', equiposRoutes);
 app.use('/api/mantenimientos', mantenimientosRoutes);
+app.use('/api/empleados', empleadosRoutes);
+app.use('/api/asignaciones', asignacionesRoutes);
 
 // Ruta de comprobación de salud del servidor
 app.get('/health', (req, res) => {
@@ -30,7 +34,7 @@ app.get('/health', (req, res) => {
 // Inicialización automática de las tablas y usuario administrador por defecto
 async function initDatabase() {
   try {
-    // Crear tabla de usuarios si no existe
+    // 1. Crear tabla de usuarios
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id SERIAL PRIMARY KEY,
@@ -42,7 +46,48 @@ async function initDatabase() {
       );
     `);
 
-    // Crear tabla de mantenimientos si no existe
+    // 2. Crear tabla de empleados
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS empleados (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        no_empleado VARCHAR(50),
+        empresa VARCHAR(100),
+        area VARCHAR(100),
+        puesto VARCHAR(100),
+        email VARCHAR(100),
+        estado VARCHAR(20) DEFAULT 'activo',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 3. Crear tabla de estados de equipo
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS estados_equipo (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(50) UNIQUE NOT NULL,
+        descripcion TEXT
+      );
+    `);
+
+    // Insertar estados por defecto
+    await pool.query(`
+      INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
+      (1, 'Resguardo', 'Equipo en resguardo sin personal asignado'),
+      (2, 'Asignado', 'Equipo actualmente asignado a un empleado'),
+      (3, 'Mantenimiento', 'Equipo en proceso de mantenimiento o reparación'),
+      (4, 'Baja', 'Equipo dado de baja')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // 4. Migración de columnas en equipos
+    await pool.query(`
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL;
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS estado_id INT REFERENCES estados_equipo(id) DEFAULT 1;
+    `);
+
+    // 5. Crear tabla de mantenimientos si no existe
     await pool.query(`
       CREATE TABLE IF NOT EXISTS mantenimientos (
         id SERIAL PRIMARY KEY,
@@ -73,12 +118,56 @@ async function initDatabase() {
       );
     `);
 
-    // Migración segura para agregar hora_programada a tablas existentes
     await pool.query(`
       ALTER TABLE mantenimientos ADD COLUMN IF NOT EXISTS hora_programada VARCHAR(20) DEFAULT 'Pendiente';
     `);
 
-    // Crear usuario admin si no existe
+    // 6. Crear tabla de historial de asignaciones
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS historial_asignaciones (
+        id SERIAL PRIMARY KEY,
+        equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        tipo_movimiento VARCHAR(30) NOT NULL,
+        motivo TEXT,
+        fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        observaciones TEXT,
+        firma_empleado TEXT,
+        firma_ti TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 7. Migración de datos de personal_asignado preexistente hacia la tabla empleados
+    await pool.query(`
+      INSERT INTO empleados (nombre, area, empresa)
+      SELECT DISTINCT TRIM(personal_asignado), COALESCE(NULLIF(TRIM(area), ''), 'General'), COALESCE(NULLIF(TRIM(empresa), ''), 'ITZ OIL & GAS')
+      FROM equipos
+      WHERE personal_asignado IS NOT NULL 
+        AND TRIM(personal_asignado) != '' 
+        AND LOWER(TRIM(personal_asignado)) NOT IN ('no asignado', 'sin asignar', 'resguardo')
+      ON CONFLICT DO NOTHING;
+    `);
+
+    // Enlazar equipos con empleados y asignar estado 'Asignado' (2)
+    await pool.query(`
+      UPDATE equipos e
+      SET empleado_id = emp.id,
+          estado_id = 2
+      FROM empleados emp
+      WHERE e.empleado_id IS NULL
+        AND TRIM(e.personal_asignado) = emp.nombre;
+    `);
+
+    // Equipos sin empleado asignado pasan a estado 'Resguardo' (1)
+    await pool.query(`
+      UPDATE equipos
+      SET estado_id = 1
+      WHERE empleado_id IS NULL AND (estado_id IS NULL OR estado_id = 0);
+    `);
+
+    // 8. Crear usuario admin si no existe
     const adminCheck = await pool.query("SELECT id FROM usuarios WHERE username = 'admin'");
     if (adminCheck.rows.length === 0) {
       const passwordHash = await bcrypt.hash('admin123', 10);

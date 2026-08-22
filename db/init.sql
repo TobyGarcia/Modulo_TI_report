@@ -1,10 +1,41 @@
 -- Script de inicialización de la base de datos para la gestión de equipos e inventario QR
 
+-- Tabla de Empleados
+CREATE TABLE IF NOT EXISTS empleados (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    no_empleado VARCHAR(50),
+    empresa VARCHAR(100),
+    area VARCHAR(100),
+    puesto VARCHAR(100),
+    email VARCHAR(100),
+    estado VARCHAR(20) DEFAULT 'activo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de Estados de Equipo
+CREATE TABLE IF NOT EXISTS estados_equipo (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL,
+    descripcion TEXT
+);
+
+-- Inserción de estados predeterminados
+INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
+(1, 'Resguardo', 'Equipo en resguardo sin personal asignado'),
+(2, 'Asignado', 'Equipo actualmente asignado a un empleado'),
+(3, 'Mantenimiento', 'Equipo en proceso de mantenimiento o reparación'),
+(4, 'Baja', 'Equipo dado de baja')
+ON CONFLICT (id) DO NOTHING;
+
 -- Tabla principal de equipos
 CREATE TABLE IF NOT EXISTS equipos (
     id SERIAL PRIMARY KEY,
     item INT,
     personal_asignado VARCHAR(150),
+    empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+    estado_id INT REFERENCES estados_equipo(id) DEFAULT 1,
     empresa VARCHAR(100),
     ciudad VARCHAR(100),
     area VARCHAR(100),
@@ -37,21 +68,16 @@ CREATE TABLE IF NOT EXISTS usuarios (
 );
 
 -- Usuario Administrador por defecto: (admin / admin123)
--- El hash bcrypt corresponde a la contraseña 'admin123'
 INSERT INTO usuarios (nombre, username, password_hash, role)
 VALUES ('Administrador', 'admin', '$2a$10$eE6sO7oN8g1cRzE/v10f..wKxGvRj1J9dF9iK5L7M3N1O5P9Q2R4u', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
--- Comentarios explicativos
-COMMENT ON TABLE equipos IS 'Tabla principal de inventario de equipos de cómputo y etiquetas QR';
-COMMENT ON TABLE usuarios IS 'Tabla de usuarios autenticados del sistema';
-
--- Tabla de mantenimientos (programación, levantamiento de reporte y bitácora)
+-- Tabla de mantenimientos
 CREATE TABLE IF NOT EXISTS mantenimientos (
     id SERIAL PRIMARY KEY,
     equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
-    tipo_mantenimiento VARCHAR(20) NOT NULL, -- 'preventivo' o 'correctivo'
-    estado VARCHAR(20) NOT NULL DEFAULT 'programado', -- 'programado', 'completado', 'cancelado'
+    tipo_mantenimiento VARCHAR(20) NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'programado',
     fecha_programada DATE,
     fecha_realizado TIMESTAMP,
     turno VARCHAR(50),
@@ -75,5 +101,25 @@ CREATE TABLE IF NOT EXISTS mantenimientos (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE mantenimientos IS 'Tabla de programación, reportes individuales y bitácora de mantenimiento SGI';
+-- Tabla de Historial de Asignaciones y Movimientos
+CREATE TABLE IF NOT EXISTS historial_asignaciones (
+    id SERIAL PRIMARY KEY,
+    equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+    empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+    tipo_movimiento VARCHAR(30) NOT NULL, -- 'asignacion', 'desasignacion', 'reasignacion'
+    motivo TEXT, -- 'Cambio de equipo', 'Baja de empleado', 'Nuevo ingreso', etc.
+    fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+    observaciones TEXT,
+    firma_empleado TEXT,
+    firma_ti TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+-- Comentarios explicativos
+COMMENT ON TABLE empleados IS 'Tabla de empleados / personal para asignación de equipos';
+COMMENT ON TABLE estados_equipo IS 'Catálogo de estados de asignación de equipos (Resguardo, Asignado, Mantenimiento, Baja)';
+COMMENT ON TABLE equipos IS 'Tabla principal de inventario de equipos de cómputo y etiquetas QR';
+COMMENT ON TABLE usuarios IS 'Tabla de usuarios autenticados del sistema';
+COMMENT ON TABLE mantenimientos IS 'Tabla de programación, reportes individuales y bitácora de mantenimiento SGI';
+COMMENT ON TABLE historial_asignaciones IS 'Historial de asignaciones, desasignaciones y reasignaciones de equipos';

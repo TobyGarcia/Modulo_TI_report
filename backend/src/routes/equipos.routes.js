@@ -22,22 +22,30 @@ router.get('/info/network-ip', (req, res) => {
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { q } = req.query;
-    let query = 'SELECT * FROM equipos';
+    let query = `
+      SELECT e.*, 
+             emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa,
+             st.nombre as estado_nombre, st.descripcion as estado_descripcion
+      FROM equipos e
+      LEFT JOIN empleados emp ON e.empleado_id = emp.id
+      LEFT JOIN estados_equipo st ON e.estado_id = st.id
+    `;
     let params = [];
 
     if (q) {
       query += ` WHERE 
-        hostname ILIKE $1 OR 
-        serial ILIKE $1 OR 
-        personal_asignado ILIKE $1 OR 
-        marca ILIKE $1 OR 
-        modelo ILIKE $1 OR 
-        area ILIKE $1 OR 
-        empresa ILIKE $1`;
+        e.hostname ILIKE $1 OR 
+        e.serial ILIKE $1 OR 
+        e.personal_asignado ILIKE $1 OR 
+        emp.nombre ILIKE $1 OR
+        e.marca ILIKE $1 OR 
+        e.modelo ILIKE $1 OR 
+        e.area ILIKE $1 OR 
+        e.empresa ILIKE $1`;
       params.push(`%${q}%`);
     }
 
-    query += ' ORDER BY id DESC';
+    query += ' ORDER BY e.id DESC';
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
@@ -52,10 +60,19 @@ router.get('/:identifier', authenticateToken, async (req, res) => {
     const { identifier } = req.params;
     let result;
 
+    const baseQuery = `
+      SELECT e.*, 
+             emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa, emp.no_empleado,
+             st.nombre as estado_nombre, st.descripcion as estado_descripcion
+      FROM equipos e
+      LEFT JOIN empleados emp ON e.empleado_id = emp.id
+      LEFT JOIN estados_equipo st ON e.estado_id = st.id
+    `;
+
     if (!isNaN(identifier)) {
-      result = await pool.query('SELECT * FROM equipos WHERE id = $1', [parseInt(identifier, 10)]);
+      result = await pool.query(`${baseQuery} WHERE e.id = $1`, [parseInt(identifier, 10)]);
     } else {
-      result = await pool.query('SELECT * FROM equipos WHERE serial = $1 OR hostname = $1', [identifier]);
+      result = await pool.query(`${baseQuery} WHERE e.serial = $1 OR e.hostname = $1`, [identifier]);
     }
 
     if (result.rows.length === 0) {
@@ -96,22 +113,47 @@ router.get('/:id/qr', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
-      item, personal_asignado, empresa, ciudad, area, hostname,
+      item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     } = req.body;
 
+    let targetEmpleadoId = empleado_id || null;
+    let targetPersonal = personal_asignado || null;
+
+    // Si viene empleado_id, sincronizar personal_asignado
+    if (targetEmpleadoId) {
+      const empRes = await pool.query('SELECT nombre FROM empleados WHERE id = $1', [targetEmpleadoId]);
+      if (empRes.rows.length > 0) {
+        targetPersonal = empRes.rows[0].nombre;
+      }
+    } else if (targetPersonal && targetPersonal.trim() && targetPersonal !== 'No asignado') {
+      // Buscar o crear en empleados
+      const empFind = await pool.query('SELECT id FROM empleados WHERE nombre = $1', [targetPersonal.trim()]);
+      if (empFind.rows.length > 0) {
+        targetEmpleadoId = empFind.rows[0].id;
+      } else {
+        const empNew = await pool.query(
+          'INSERT INTO empleados (nombre, area, empresa) VALUES ($1, $2, $3) RETURNING id',
+          [targetPersonal.trim(), area || 'General', empresa || 'ITZ OIL & GAS']
+        );
+        targetEmpleadoId = empNew.rows[0].id;
+      }
+    }
+
+    const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
+
     const query = `
       INSERT INTO equipos (
-        item, personal_asignado, empresa, ciudad, area, hostname,
+        item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
         gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *;
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, personal_asignado, empresa, ciudad, area, hostname,
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     ];
@@ -144,15 +186,35 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
 
       if (!serial && !hostname) continue;
 
+      let empId = null;
+      let pAsignado = personal_asignado ? personal_asignado.trim() : null;
+
+      if (pAsignado && pAsignado !== 'No asignado' && pAsignado !== 'SIN ASIGNAR') {
+        const empFind = await pool.query('SELECT id FROM empleados WHERE nombre = $1', [pAsignado]);
+        if (empFind.rows.length > 0) {
+          empId = empFind.rows[0].id;
+        } else {
+          const empNew = await pool.query(
+            'INSERT INTO empleados (nombre, area, empresa) VALUES ($1, $2, $3) RETURNING id',
+            [pAsignado, area || 'General', empresa || 'ITZ OIL & GAS']
+          );
+          empId = empNew.rows[0].id;
+        }
+      }
+
+      const stId = empId ? 2 : 1;
+
       const upsertQuery = `
         INSERT INTO equipos (
-          item, personal_asignado, empresa, ciudad, area, hostname,
+          item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
           marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
           gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         ON CONFLICT (serial) DO UPDATE SET
           item = EXCLUDED.item,
           personal_asignado = EXCLUDED.personal_asignado,
+          empleado_id = EXCLUDED.empleado_id,
+          estado_id = EXCLUDED.estado_id,
           empresa = EXCLUDED.empresa,
           ciudad = EXCLUDED.ciudad,
           area = EXCLUDED.area,
@@ -174,7 +236,7 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
       `;
 
       const values = [
-        item ? parseInt(item, 10) : null, personal_asignado, empresa, ciudad, area, hostname,
+        item ? parseInt(item, 10) : null, pAsignado, empId, stId, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
         gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
       ];
@@ -204,23 +266,40 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      item, personal_asignado, empresa, ciudad, area, hostname,
+      item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     } = req.body;
 
+    let targetEmpleadoId = empleado_id || null;
+    let targetPersonal = personal_asignado || null;
+
+    if (targetEmpleadoId) {
+      const empRes = await pool.query('SELECT nombre FROM empleados WHERE id = $1', [targetEmpleadoId]);
+      if (empRes.rows.length > 0) {
+        targetPersonal = empRes.rows[0].nombre;
+      }
+    } else if (targetPersonal && targetPersonal.trim() && targetPersonal !== 'No asignado') {
+      const empFind = await pool.query('SELECT nombre, id FROM empleados WHERE nombre = $1', [targetPersonal.trim()]);
+      if (empFind.rows.length > 0) {
+        targetEmpleadoId = empFind.rows[0].id;
+      }
+    }
+
+    const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
+
     const query = `
       UPDATE equipos SET
-        item = $1, personal_asignado = $2, empresa = $3, ciudad = $4, area = $5, hostname = $6,
-        marca = $7, modelo = $8, serial = $9, so = $10, cpu = $11, ram_capacidad = $12, disco_capacidad = $13,
-        gpu_tipo = $14, gpu_modelo = $15, estado_fisico = $16, mac_wifi = $17, uso_recomendado = $18, observaciones = $19,
+        item = $1, personal_asignado = $2, empleado_id = $3, estado_id = $4, empresa = $5, ciudad = $6, area = $7, hostname = $8,
+        marca = $9, modelo = $10, serial = $11, so = $12, cpu = $13, ram_capacidad = $14, disco_capacidad = $15,
+        gpu_tipo = $16, gpu_modelo = $17, estado_fisico = $18, mac_wifi = $19, uso_recomendado = $20, observaciones = $21,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $20
+      WHERE id = $22
       RETURNING *;
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, personal_asignado, empresa, ciudad, area, hostname,
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
       id

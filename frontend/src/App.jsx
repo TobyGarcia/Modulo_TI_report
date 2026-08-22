@@ -8,6 +8,7 @@ import LabelPrintView from './components/LabelPrintView';
 import ScanResultView from './components/ScanResultView';
 import UserManagement from './components/UserManagement';
 import BitacoraView from './components/BitacoraView';
+import EmployeeManagement from './components/EmployeeManagement';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -65,7 +66,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'bitacora' | 'users'
+  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'empleados' | 'bitacora' | 'users'
   const [currentView, setCurrentView] = useState('main'); // 'main' | 'print' | 'scan'
   const [scanId, setScanId] = useState(null);
   const [selectedEquipmentsToPrint, setSelectedEquipmentsToPrint] = useState([]);
@@ -192,7 +193,7 @@ export default function App() {
     );
   }
 
-  // 4. Panel de Administración Principal (Pestañas de Inventario / Bitácora / Usuarios)
+  // 4. Panel de Administración Principal (Pestañas de Inventario / Personal / Bitácora / Usuarios)
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <TopBar
@@ -212,6 +213,9 @@ export default function App() {
               onImportClick={() => setIsImportModalOpen(true)}
               onPrintLabelsClick={handleOpenPrintView}
             />
+          )}
+          {activeTab === 'empleados' && (
+            <EmployeeManagement token={token} />
           )}
           {activeTab === 'bitacora' && (
             <BitacoraView token={token} currentUser={user} />

@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   Laptop, Cpu, HardDrive, Cpu as GpuIcon, User, Building2, MapPin,
-  CheckCircle, Wifi, FileText, AlertTriangle, LogOut, Calendar, Plus, History, Download, Wrench
+  CheckCircle, Wifi, FileText, AlertTriangle, LogOut, Calendar, Plus, History, Download, Wrench,
+  UserCheck, UserPlus, ArrowRightLeft, ShieldCheck
 } from 'lucide-react';
 import ScheduleMaintenanceModal from './ScheduleMaintenanceModal';
 import MaintenanceReportModal from './MaintenanceReportModal';
-import { generarReportePDF } from '../utils/pdfGenerator';
+import AssignmentModal from './AssignmentModal';
+import UnassignmentModal from './UnassignmentModal';
+import { generarReportePDF, generarFormatoAsignacionPDF, generarFormatoDesasignacionPDF } from '../utils/pdfGenerator';
 
 export default function ScanResultView({ equipmentId, token, onLogout }) {
   const [equipo, setEquipo] = useState(null);
@@ -14,10 +17,14 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('info'); // 'info' | 'history'
 
-  // Modales
+  // Modales Mantenimiento
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedMaintenance, setSelectedMaintenance] = useState(null);
+
+  // Modales Asignación / Desasignación
+  const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+  const [isUnassignmentModalOpen, setIsUnassignmentModalOpen] = useState(false);
 
   const fetchEquipoYHistorial = async () => {
     try {
@@ -49,7 +56,6 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
   useEffect(() => {
     fetchEquipoYHistorial();
 
-    // Auto-abrir modal si hay un borrador de reporte en curso para este equipo (ej. tras tomar fotos en móvil)
     try {
       const hasDraft = localStorage.getItem(`draft_report_${equipmentId}`);
       if (hasDraft) {
@@ -97,6 +103,41 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
     }
   };
 
+  // Callback tras asignar equipo
+  const handleAssignmentSuccess = (data) => {
+    setIsAssignmentModalOpen(false);
+    fetchEquipoYHistorial();
+
+    // Generar automáticamente el Formato PDF de Asignación (R1PTI2)
+    try {
+      generarFormatoAsignacionPDF(data.historial, data.equipo, data.empleado);
+    } catch (e) {
+      console.error('Error al generar PDF de Asignación:', e);
+    }
+    alert('¡Equipo asignado con éxito y Formato de Asignación PDF generado!');
+  };
+
+  // Callback tras desasignar / reasignar equipo
+  const handleUnassignmentSuccess = (data) => {
+    setIsUnassignmentModalOpen(false);
+    fetchEquipoYHistorial();
+
+    try {
+      // 1. Generar PDF de Desasignación (R3PTI2)
+      generarFormatoDesasignacionPDF(data.historial, data.equipo, data.empleadoAnterior, data.motivo);
+
+      // 2. Si fue reasignación directa, generar también el PDF de Asignación para el nuevo usuario
+      if (data.isReassign && data.nuevoEmpleado) {
+        setTimeout(() => {
+          generarFormatoAsignacionPDF(data.historial, data.equipo, data.nuevoEmpleado);
+        }, 1000);
+      }
+    } catch (e) {
+      console.error('Error al generar PDF de Desasignación:', e);
+    }
+    alert('¡Proceso completado con éxito y Formato(s) PDF generado(s)!');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -128,9 +169,11 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
     );
   }
 
+  const isAssigned = !!(equipo.empleado_id || (equipo.personal_asignado && equipo.personal_asignado.trim() && equipo.personal_asignado !== 'No asignado'));
+
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 max-w-lg mx-auto space-y-4">
-      {/* Botón superior de Cerrar Sesión en vista móvil */}
+      {/* Botón superior de Cerrar Sesión */}
       {onLogout && (
         <div className="flex justify-between items-center text-xs">
           <span className="text-gray-500 font-semibold uppercase tracking-wider">Acceso Técnico TI</span>
@@ -144,7 +187,7 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
         </div>
       )}
 
-      {/* REQUERIMIENTO 2: Banner de Alerta de Mantenimiento Programado */}
+      {/* Banner de Mantenimiento Programado */}
       {(() => {
         const safeHistorial = Array.isArray(historialMantenimientos) ? historialMantenimientos : [];
         const pendiente = safeHistorial.find(m => m && m.estado === 'programado');
@@ -180,7 +223,7 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
       {/* Tarjeta Ficha Móvil */}
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden border">
         {/* Encabezado Principal */}
-        <div className="bg-gradient-to-r from-indigo-700 to-purple-700 p-6 text-white text-center">
+        <div className="bg-gradient-to-r from-indigo-700 to-purple-700 p-6 text-white text-center relative">
           <Laptop className="w-12 h-12 mx-auto mb-2 opacity-90" />
           <h1 className="text-2xl font-bold font-mono tracking-tight">{equipo.hostname || 'SIN HOSTNAME'}</h1>
           <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mt-1">
@@ -212,38 +255,72 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
           </button>
         </div>
 
-        {/* PANEL 1: ACCIONES RÁPIDAS DE MANTENIMIENTO */}
-        <div className="p-4 bg-indigo-50/70 border-b flex gap-2">
-          <button
-            onClick={() => setIsScheduleModalOpen(true)}
-            className="flex-1 py-2.5 px-3 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-1.5 transition-all"
-          >
-            <Calendar className="w-4 h-4 text-indigo-600" />
-            <span>Programar</span>
-          </button>
+        {/* PANEL 1: ACCIONES RÁPIDAS DE MANTENIMIENTO Y ASIGNACIÓN */}
+        <div className="p-4 bg-indigo-50/70 border-b space-y-2">
+          {/* Botón de Asignación / Desasignación según el Estado */}
+          {!isAssigned ? (
+            <button
+              onClick={() => setIsAssignmentModalOpen(true)}
+              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Asignar Equipo (Actualmente en Resguardo)</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsUnassignmentModalOpen(true)}
+              className="w-full py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              <span>Desasignar / Reasignar Equipo</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => {
-              setSelectedMaintenance(null);
-              setIsReportModalOpen(true);
-            }}
-            className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Levantar Reporte</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="flex-1 py-2.5 px-3 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-1.5 transition-all"
+            >
+              <Calendar className="w-4 h-4 text-indigo-600" />
+              <span>Programar</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedMaintenance(null);
+                setIsReportModalOpen(true);
+              }}
+              className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Levantar Reporte</span>
+            </button>
+          </div>
         </div>
 
         {/* PANEL 2: FICHA DEL EQUIPO */}
         {activeTab === 'info' && (
           <div className="p-5 space-y-5">
-            {/* Asignación */}
-            <div className="bg-indigo-50/40 rounded-xl p-4 border border-indigo-100 space-y-2">
-              <div className="flex items-center space-x-2 text-indigo-900 font-semibold text-sm">
-                <User className="w-4 h-4 text-indigo-600" />
-                <span>Personal Asignado</span>
+            {/* Estado de Asignación */}
+            <div className={`rounded-xl p-4 border space-y-2 ${
+              isAssigned ? 'bg-indigo-50/40 border-indigo-100' : 'bg-emerald-50/50 border-emerald-200'
+            }`}>
+              <div className="flex justify-between items-center text-sm font-semibold">
+                <div className="flex items-center space-x-2 text-indigo-900">
+                  <User className="w-4 h-4 text-indigo-600" />
+                  <span>Personal Asignado</span>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                  isAssigned ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {isAssigned ? 'ASIGNADO' : 'EN RESGUARDO'}
+                </span>
               </div>
-              <p className="text-base font-bold text-gray-900 pl-6">{equipo.personal_asignado || 'No asignado'}</p>
+
+              <p className="text-base font-bold text-gray-900 pl-6">
+                {equipo.empleado_nombre || equipo.personal_asignado || 'No asignado (Equipo en Resguardo)'}
+              </p>
+
               <div className="grid grid-cols-2 gap-2 pl-6 pt-2 text-xs text-gray-600 border-t border-indigo-100">
                 <div className="flex items-center space-x-1">
                   <Building2 className="w-3.5 h-3.5 text-gray-400" />
@@ -379,6 +456,22 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
         onSave={handleSaveReport}
         equipment={equipo}
         existingMaintenance={selectedMaintenance}
+      />
+
+      <AssignmentModal
+        isOpen={isAssignmentModalOpen}
+        onClose={() => setIsAssignmentModalOpen(false)}
+        equipment={equipo}
+        token={token}
+        onAssignmentSuccess={handleAssignmentSuccess}
+      />
+
+      <UnassignmentModal
+        isOpen={isUnassignmentModalOpen}
+        onClose={() => setIsUnassignmentModalOpen(false)}
+        equipment={equipo}
+        token={token}
+        onUnassignmentSuccess={handleUnassignmentSuccess}
       />
     </div>
   );

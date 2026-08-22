@@ -290,7 +290,9 @@ export default function EquipmentList({
                         <div className="text-xs font-mono text-gray-500">S/N: {eq.serial}</div>
                       </td>
                       <td className="p-4">
-                        <div className="font-semibold text-gray-800">{eq.personal_asignado || 'No asignado'}</div>
+                        <div className="font-semibold text-gray-800">
+                          {eq.empleado_nombre || eq.personal_asignado || 'No asignado (Resguardo)'}
+                        </div>
                         <div className="text-xs text-gray-500">{eq.ciudad}</div>
                       </td>
                       <td className="p-4">
@@ -305,10 +307,13 @@ export default function EquipmentList({
                         <div>{eq.cpu}</div>
                         <div className="text-gray-400">{eq.ram_capacidad} RAM | {eq.disco_capacidad}</div>
                       </td>
-                      <td className="p-4">
-                        <span className="inline-block px-2 py-0.5 text-xs font-semibold text-emerald-800 bg-emerald-100 rounded-md">
-                          {eq.estado_fisico || 'Excelente'}
+                      <td className="p-4 space-y-1">
+                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded-md ${
+                          eq.estado_nombre === 'Asignado' || eq.empleado_id ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {eq.estado_nombre || (eq.empleado_id ? 'Asignado' : 'Resguardo')}
                         </span>
+                        <div className="text-[11px] text-gray-500">{eq.estado_fisico || 'Excelente'}</div>
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center space-x-2">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Users, LogOut, UserCheck, ClipboardList } from 'lucide-react';
+import { Monitor, Users, LogOut, UserCheck, ClipboardList, UserPlus } from 'lucide-react';
 
 export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
   return (
@@ -31,6 +31,18 @@ export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
           </button>
 
           <button
+            onClick={() => setActiveTab('empleados')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              activeTab === 'empleados'
+                ? 'bg-indigo-700 text-white shadow-sm'
+                : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Personal</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('bitacora')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
               activeTab === 'bitacora'
@@ -51,7 +63,7 @@ export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Usuarios</span>
+            <span>Usuarios TI</span>
           </button>
         </nav>
 
