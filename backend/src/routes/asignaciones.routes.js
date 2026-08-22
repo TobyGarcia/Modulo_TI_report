@@ -274,15 +274,39 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
   }
 });
 
+// Obtener el historial global de todas las asignaciones y desasignaciones (Protegido)
+router.get('/historial', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT h.*, 
+             eq.hostname, eq.serial, eq.marca, eq.modelo, eq.so, eq.cpu, eq.ram_capacidad, eq.disco_capacidad, eq.estado_fisico, eq.personal_asignado as equipo_personal_actual,
+             emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa, emp.no_empleado,
+             u.nombre as usuario_ti_nombre
+      FROM historial_asignaciones h
+      LEFT JOIN equipos eq ON h.equipo_id = eq.id
+      LEFT JOIN empleados emp ON h.empleado_id = emp.id
+      LEFT JOIN usuarios u ON h.usuario_id = u.id
+      ORDER BY h.fecha_movimiento DESC;
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al consultar historial global de asignaciones:', err);
+    res.status(500).json({ error: 'Error al consultar el historial global de asignaciones' });
+  }
+});
+
 // Obtener el historial de asignaciones de un equipo (Protegido)
 router.get('/equipos/:id/historial-asignaciones', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const query = `
       SELECT h.*, 
+             eq.hostname, eq.serial, eq.marca, eq.modelo, eq.so, eq.cpu, eq.ram_capacidad, eq.disco_capacidad, eq.estado_fisico,
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa,
              u.nombre as usuario_ti_nombre
       FROM historial_asignaciones h
+      LEFT JOIN equipos eq ON h.equipo_id = eq.id
       LEFT JOIN empleados emp ON h.empleado_id = emp.id
       LEFT JOIN usuarios u ON h.usuario_id = u.id
       WHERE h.equipo_id = $1
@@ -297,3 +321,4 @@ router.get('/equipos/:id/historial-asignaciones', authenticateToken, async (req,
 });
 
 module.exports = router;
+

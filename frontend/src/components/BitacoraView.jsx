@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar as CalendarIcon, ClipboardList, Plus, FileText, Download, CheckCircle,
-  Clock, AlertCircle, Search, Filter, Wrench, RefreshCw, User, Laptop, X
+  Clock, AlertCircle, Search, Filter, Wrench, RefreshCw, User, Laptop, X,
+  ArrowRightLeft, UserCheck, ShieldCheck, FileCheck
 } from 'lucide-react';
-import { generarReportePDF, generarBitacoraPDF } from '../utils/pdfGenerator';
+import {
+  generarReportePDF,
+  generarBitacoraPDF,
+  generarFormatoAsignacionPDF,
+  generarFormatoDesasignacionPDF
+} from '../utils/pdfGenerator';
 import MaintenanceReportModal from './MaintenanceReportModal';
 import ScheduleMaintenanceModal from './ScheduleMaintenanceModal';
 import CalendarView from './CalendarView';
@@ -25,8 +31,9 @@ const safeFormatDate = (rawDate) => {
 export default function BitacoraView({ token, currentUser }) {
   const [mantenimientos, setMantenimientos] = useState([]);
   const [equipos, setEquipos] = useState([]);
+  const [historialAsignaciones, setHistorialAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('agenda'); // 'agenda' | 'calendar' | 'bitacora'
+  const [activeTab, setActiveTab] = useState('agenda'); // 'agenda' | 'calendar' | 'bitacora' | 'asignaciones'
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState('todos'); // 'todos' | 'preventivo' | 'correctivo'
   const [selectedDateForSchedule, setSelectedDateForSchedule] = useState(null);
@@ -69,9 +76,24 @@ export default function BitacoraView({ token, currentUser }) {
     }
   };
 
+  const fetchHistorialAsignaciones = async () => {
+    try {
+      const res = await fetch('/api/asignaciones/historial', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistorialAsignaciones(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Error al obtener historial de asignaciones:', e);
+    }
+  };
+
   useEffect(() => {
     fetchMantenimientos();
     fetchEquipos();
+    fetchHistorialAsignaciones();
   }, [token]);
 
   // Guardar / Reprogramar Mantenimiento
@@ -99,11 +121,9 @@ export default function BitacoraView({ token, currentUser }) {
     }
   };
 
-  // Cancelar Mantenimiento Programado
+  // Cancelar Programado
   const handleCancelarProgramado = async (maint) => {
-    if (!window.confirm(`¿Está seguro de que desea cancelar el mantenimiento programado para ${maint.hostname || 'este equipo'}?`)) {
-      return;
-    }
+    if (!window.confirm('¿Estás seguro de cancelar este mantenimiento programado?')) return;
     try {
       const res = await fetch(`/api/mantenimientos/${maint.id}`, {
         method: 'PUT',
@@ -191,12 +211,40 @@ export default function BitacoraView({ token, currentUser }) {
     generarReportePDF(maint, eq);
   };
 
-  // Guardas de seguridad para evitar pantallas en blanco si la API está cargando
-  const safeMantenimientos = Array.isArray(mantenimientos) ? mantenimientos : [];
-  const safeEquipos = Array.isArray(equipos) ? equipos : [];
+  // Descargar PDF de Asignación o Desasignación desde la tabla de historial
+  const handleDownloadAsignacionPDF = (hist) => {
+    const equipoObj = {
+      id: hist.equipo_id,
+      hostname: hist.hostname,
+      serial: hist.serial,
+      marca: hist.marca,
+      modelo: hist.modelo,
+      so: hist.so,
+      cpu: hist.cpu,
+      ram_capacidad: hist.ram_capacidad,
+      disco_capacidad: hist.disco_capacidad,
+      estado_fisico: hist.estado_fisico,
+      personal_asignado: hist.empleado_nombre || hist.equipo_personal_actual,
+      area: hist.empleado_area,
+      empresa: hist.empleado_empresa
+    };
+
+    const empleadoObj = {
+      nombre: hist.empleado_nombre || hist.equipo_personal_actual || 'Empleado Responsable',
+      area: hist.empleado_area || 'General',
+      empresa: hist.empleado_empresa || 'ITZ OIL & GAS',
+      no_empleado: hist.no_empleado
+    };
+
+    if (hist.tipo_movimiento === 'desasignacion') {
+      generarFormatoDesasignacionPDF(hist, equipoObj, empleadoObj, hist.motivo);
+    } else {
+      generarFormatoAsignacionPDF(hist, equipoObj, empleadoObj);
+    }
+  };
 
   // Filtrado de mantenimientos
-  const filteredMantenimientos = safeMantenimientos.filter(m => {
+  const filteredMantenimientos = mantenimientos.filter(m => {
     if (!m) return false;
     const matchSearch =
       !searchTerm.trim() ||
@@ -210,6 +258,20 @@ export default function BitacoraView({ token, currentUser }) {
     return matchSearch && matchTipo;
   });
 
+  // Filtrado de historial de asignaciones
+  const filteredHistorialAsignaciones = historialAsignaciones.filter(h => {
+    if (!h) return false;
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return true;
+    return (
+      (h.hostname && h.hostname.toLowerCase().includes(term)) ||
+      (h.serial && h.serial.toLowerCase().includes(term)) ||
+      (h.empleado_nombre && h.empleado_nombre.toLowerCase().includes(term)) ||
+      (h.motivo && h.motivo.toLowerCase().includes(term)) ||
+      (h.tipo_movimiento && h.tipo_movimiento.toLowerCase().includes(term))
+    );
+  });
+
   const programados = filteredMantenimientos.filter(m => m.estado === 'programado');
   const completados = filteredMantenimientos.filter(m => m.estado === 'completado');
 
@@ -220,10 +282,10 @@ export default function BitacoraView({ token, currentUser }) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
             <Wrench className="w-6 h-6 text-indigo-600" />
-            <span>Mantenimiento & Bitácora SGI</span>
+            <span>Bitácora, Agenda & Asignaciones SGI</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Calendario de ciclo de vida, citas por hora y bitácora oficial SGI (R2PTI1 y A1PTI1)
+            Calendario de mantenimientos, bitácora oficial y control de PDFs de asignación/desasignación
           </p>
         </div>
 
@@ -282,46 +344,42 @@ export default function BitacoraView({ token, currentUser }) {
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-3">
           <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
-            <Wrench className="w-6 h-6" />
+            <ArrowRightLeft className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500 font-semibold block">Preventivos</span>
-            <span className="text-xl font-bold text-gray-900">
-              {mantenimientos.filter(m => m.tipo_mantenimiento === 'preventivo').length}
-            </span>
+            <span className="text-xs text-gray-500 font-semibold block">Asignaciones</span>
+            <span className="text-xl font-bold text-gray-900">{historialAsignaciones.length}</span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-3">
-          <div className="p-3 bg-red-50 rounded-xl text-red-600">
-            <AlertCircle className="w-6 h-6" />
+          <div className="p-3 bg-purple-50 rounded-xl text-purple-600">
+            <Wrench className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500 font-semibold block">Correctivos</span>
-            <span className="text-xl font-bold text-gray-900">
-              {mantenimientos.filter(m => m.tipo_mantenimiento === 'correctivo').length}
-            </span>
+            <span className="text-xs text-gray-500 font-semibold block">Total Registros</span>
+            <span className="text-xl font-bold text-gray-900">{mantenimientos.length}</span>
           </div>
         </div>
       </div>
 
-      {/* Filtros y Pestañas de Vista */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
-        {/* Pestañas de Vista (Calendario Mensual | Lista Agenda | Bitácora SGI) */}
-        <div className="flex bg-gray-100 p-1 rounded-xl w-full sm:w-auto text-xs font-semibold">
+      {/* Barra de Control y Navegación entre Pestañas */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+        {/* Pestañas de Vista */}
+        <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl w-full sm:w-auto text-xs font-semibold gap-1">
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all ${
               activeTab === 'calendar' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <CalendarIcon className="w-4 h-4" />
-            <span>Calendario Mensual</span>
+            <span>Calendario</span>
           </button>
 
           <button
             onClick={() => setActiveTab('agenda')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all ${
               activeTab === 'agenda' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -331,42 +389,45 @@ export default function BitacoraView({ token, currentUser }) {
 
           <button
             onClick={() => setActiveTab('bitacora')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all ${
               activeTab === 'bitacora' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <ClipboardList className="w-4 h-4" />
-            <span>Bitácora SGI A1PTI1 ({completados.length})</span>
+            <span>Bitácora SGI ({completados.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('asignaciones')}
+            className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all ${
+              activeTab === 'asignaciones' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
+            <span>Historial Asignaciones & PDFs ({historialAsignaciones.length})</span>
           </button>
         </div>
 
-        {/* Buscador & Filtro Tipo */}
+        {/* Buscador & Filtro */}
         <div className="flex items-center space-x-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-64">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
             <input
               type="text"
-              placeholder="Buscar por equipo, técnico..."
+              placeholder="Buscar por equipo, persona..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-xs border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          <select
-            value={tipoFilter}
-            onChange={(e) => setTipoFilter(e.target.value)}
-            className="text-xs p-2 border rounded-xl bg-gray-50 text-gray-700 focus:bg-white"
-          >
-            <option value="todos">Todos los tipos</option>
-            <option value="preventivo">Preventivos</option>
-            <option value="correctivo">Correctivos</option>
-          </select>
-
           <button
-            onClick={fetchMantenimientos}
+            onClick={() => {
+              fetchMantenimientos();
+              fetchHistorialAsignaciones();
+            }}
             className="p-2 text-gray-500 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 rounded-xl border"
-            title="Recargar mantenimientos"
+            title="Recargar datos"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -382,106 +443,104 @@ export default function BitacoraView({ token, currentUser }) {
             setSelectedEquipment(equipos[0] || null);
             setIsScheduleModalOpen(true);
           }}
-          onSelectMaintenance={(maint) => {
-            if (maint.estado === 'programado') {
-              handleCompletarProgramado(maint);
-            } else {
-              handleDownloadReportPDF(maint);
-            }
-          }}
         />
       )}
 
       {/* CONTENIDO PESTAÑA 2: AGENDA PROGRAMADA */}
       {activeTab === 'agenda' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+          <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-4 text-white font-bold text-sm flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-5 h-5" />
+              <span>Agenda de Mantenimientos Pendientes y Programados</span>
+            </div>
+            <span className="bg-white text-amber-900 text-xs px-2.5 py-0.5 rounded-full font-extrabold">
+              {programados.length} citas
+            </span>
+          </div>
+
           {programados.length === 0 ? (
-            <div className="p-12 text-center text-gray-400 space-y-3">
-              <CalendarIcon className="w-12 h-12 mx-auto text-gray-300" />
-              <p className="font-medium text-sm">No hay mantenimientos programados pendientes.</p>
-              <button
-                onClick={() => {
-                  setSelectedDateForSchedule(null);
-                  setSelectedEquipment(equipos[0] || null);
-                  setIsScheduleModalOpen(true);
-                }}
-                className="text-xs text-indigo-600 font-semibold hover:underline"
-              >
-                + Agendar un nuevo mantenimiento futuro
-              </button>
+            <div className="p-12 text-center text-gray-500 space-y-2">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto opacity-70" />
+              <p className="font-semibold text-gray-700">No hay mantenimientos pendientes agendados.</p>
+              <p className="text-xs text-gray-400">Utiliza el botón superior para agendar una nueva cita.</p>
             </div>
           ) : (
-            <div className="divide-y">
-              {programados.map((m) => (
-                <div key={m.id} className="p-4 hover:bg-gray-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="p-3 bg-amber-100 text-amber-700 rounded-xl shrink-0 mt-1">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-sm text-gray-900">{m.hostname || 'SIN HOSTNAME'}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-700">
+                <thead className="bg-gray-50 uppercase text-[11px] font-bold text-gray-500 border-b">
+                  <tr>
+                    <th className="p-3">Fecha & Hora</th>
+                    <th className="p-3">Equipo / Hostname</th>
+                    <th className="p-3">Personal Asignado</th>
+                    <th className="p-3">Tipo Mantenimiento</th>
+                    <th className="p-3">Turno</th>
+                    <th className="p-3 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {programados.map(m => (
+                    <tr key={m.id} className="hover:bg-amber-50/40 transition">
+                      <td className="p-3 font-semibold text-amber-900">
+                        <div>{safeFormatDate(m.fecha_programada)}</div>
+                        <div className="text-[10px] text-amber-700 font-mono">Hora: {m.hora_programada || 'Pendiente'}</div>
+                      </td>
+                      <td className="p-3 font-mono font-bold text-gray-900">
+                        {m.hostname || 'SIN HOSTNAME'}
+                        <div className="text-[10px] text-gray-400 font-sans">S/N: {m.serial}</div>
+                      </td>
+                      <td className="p-3 font-medium">
+                        {m.equipo_personal_asignado || 'No asignado'}
+                        <div className="text-[10px] text-gray-400">{m.equipo_area}</div>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                           m.tipo_mantenimiento === 'preventivo' ? 'bg-indigo-100 text-indigo-800' : 'bg-red-100 text-red-800'
                         }`}>
                           {m.tipo_mantenimiento}
                         </span>
-                        <span className="text-xs text-gray-400 font-mono">Serial: {m.serial}</span>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">
-                        <span className="font-semibold">Fecha Programada:</span> {m.fecha_programada ? String(m.fecha_programada).split('T')[0] : 'N/A'} • <span className="font-bold text-indigo-600">Hora: {m.hora_programada || 'Pendiente'}</span> ({m.turno || 'Matutino'})
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        <span className="font-semibold">Técnico TI:</span> {m.tecnico_nombre || 'No asignado'}
-                      </p>
-                      {m.observaciones_equipo && (
-                        <p className="text-xs text-gray-500 italic mt-0.5">"{m.observaciones_equipo}"</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={() => handleCompletarProgramado(m)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center space-x-1 shadow-sm transition-colors"
-                      title="Completar y guardar reporte SGI"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Completar</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setSelectedEquipment(equipos.find(e => e.id === m.equipo_id) || equipos[0]);
-                        setExistingScheduleToEdit(m);
-                        setIsScheduleModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center space-x-1 shadow-sm transition-colors"
-                      title="Cambiar fecha u hora de programación"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Reprogramar</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCancelarProgramado(m)}
-                      className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-semibold rounded-xl text-xs flex items-center space-x-1 border border-red-200 transition-colors"
-                      title="Cancelar esta cita de mantenimiento"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>Cancelar</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                      <td className="p-3 text-gray-600">{m.turno || 'Matutino'}</td>
+                      <td className="p-3 text-center space-x-2">
+                        <button
+                          onClick={() => handleCompletarProgramado(m)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition"
+                        >
+                          Completar y Firmar Reporte
+                        </button>
+                        <button
+                          onClick={() => handleCancelarProgramado(m)}
+                          className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition"
+                        >
+                          Cancelar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
 
-      {/* CONTENIDO PESTAÑA 3: BITÁCORA SGI A1PTI1 (2 COLUMNAS PREVENTIVO VS CORRECTIVO) */}
+      {/* CONTENIDO PESTAÑA 3: BITÁCORA CONSOLIDADA SGI (A1PTI1) */}
       {activeTab === 'bitacora' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="bg-indigo-900 text-white p-4 rounded-2xl shadow-sm flex justify-between items-center">
+            <div>
+              <h2 className="font-bold text-sm">Bitácora General SGI A1PTI1</h2>
+              <p className="text-xs text-indigo-200">Consolidado de reportes de mantenimiento preventivo y correctivo ejecutados.</p>
+            </div>
+            <button
+              onClick={() => generarBitacoraPDF(completados, "BITACORA DE MANTENIMIENTO SGI")}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs flex items-center space-x-1"
+            >
+              <Download className="w-4 h-4" />
+              <span>Exportar PDF A1PTI1</span>
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Columna Preventivos */}
             <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
@@ -559,6 +618,92 @@ export default function BitacoraView({ token, currentUser }) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONTENIDO PESTAÑA 4: NUEVA PESTAÑA DE HISTORIAL DE ASIGNACIONES & PDFS */}
+      {activeTab === 'asignaciones' && (
+        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-700 to-indigo-800 p-4 text-white font-bold text-sm flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <ArrowRightLeft className="w-5 h-5" />
+              <span>Historial de Movimientos de Asignación y Formatos PDF SGI</span>
+            </div>
+            <span className="bg-white text-emerald-950 text-xs px-2.5 py-0.5 rounded-full font-extrabold">
+              {filteredHistorialAsignaciones.length} registros
+            </span>
+          </div>
+
+          {filteredHistorialAsignaciones.length === 0 ? (
+            <div className="p-12 text-center text-gray-500 space-y-2">
+              <FileCheck className="w-12 h-12 text-emerald-500 mx-auto opacity-70" />
+              <p className="font-semibold text-gray-700">No se encontraron movimientos de asignación registrados.</p>
+              <p className="text-xs text-gray-400">Los movimientos realizados desde la app móvil o el inventario aparecerán aquí.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-700">
+                <thead className="bg-gray-50 uppercase text-[11px] font-bold text-gray-500 border-b">
+                  <tr>
+                    <th className="p-3">Fecha</th>
+                    <th className="p-3">Movimiento</th>
+                    <th className="p-3">Equipo / Serial</th>
+                    <th className="p-3">Empleado / Personal</th>
+                    <th className="p-3">Motivo / Notas</th>
+                    <th className="p-3">Registrado por</th>
+                    <th className="p-3 text-center">Acciones / Descargar PDF</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredHistorialAsignaciones.map(hist => {
+                    const isDesasignacion = hist.tipo_movimiento === 'desasignacion';
+                    return (
+                      <tr key={hist.id} className="hover:bg-indigo-50/30 transition">
+                        <td className="p-3 font-semibold text-gray-900">
+                          {safeFormatDate(hist.fecha_movimiento)}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase ${
+                            isDesasignacion ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {hist.tipo_movimiento}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono">
+                          <div className="font-bold text-gray-900">{hist.hostname || 'EQUIPO'}</div>
+                          <div className="text-[10px] text-gray-400">S/N: {hist.serial}</div>
+                        </td>
+                        <td className="p-3 font-medium">
+                          <div className="text-gray-900 font-bold">{hist.empleado_nombre || hist.equipo_personal_actual || 'N/A'}</div>
+                          <div className="text-[10px] text-gray-400">{hist.empleado_area || 'General'}</div>
+                        </td>
+                        <td className="p-3 text-gray-700">
+                          <div className="font-semibold text-gray-800">{hist.motivo || 'N/A'}</div>
+                          <div className="text-[10px] text-gray-500 italic">{hist.observaciones || ''}</div>
+                        </td>
+                        <td className="p-3 text-gray-600 font-medium">
+                          {hist.usuario_ti_nombre || 'TI Admin'}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleDownloadAsignacionPDF(hist)}
+                            className={`px-3 py-1.5 rounded-lg font-bold text-xs shadow-xs flex items-center space-x-1.5 mx-auto transition-colors ${
+                              isDesasignacion
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            }`}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>{isDesasignacion ? 'PDF Acta (R3PTI2)' : 'PDF Responsiva (R1PTI2)'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
