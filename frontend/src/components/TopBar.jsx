@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Users, LogOut, UserCheck, ClipboardList, UserPlus, ExternalLink, Mail } from 'lucide-react';
+import { Monitor, Users, LogOut, UserCheck, ClipboardList, UserPlus, ExternalLink, Mail, FolderTree } from 'lucide-react';
 
 export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
   return (
@@ -30,6 +30,18 @@ export default function TopBar({ activeTab, setActiveTab, user, onLogout }) {
           >
             <Monitor className="w-4 h-4 text-[#c68a1d]" />
             <span>Inventario</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('catalogos')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              activeTab === 'catalogos'
+                ? 'bg-[#e6b520] text-black font-bold shadow-md'
+                : 'text-gray-300 hover:bg-neutral-800 hover:text-[#e6b520]'
+            }`}
+          >
+            <FolderTree className="w-4 h-4 text-[#c68a1d]" />
+            <span>Catálogos</span>
           </button>
 
           <button

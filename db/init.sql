@@ -29,6 +29,45 @@ INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
 (4, 'Baja', 'Equipo dado de baja')
 ON CONFLICT (id) DO NOTHING;
 
+-- Tabla de Tipos/Categorías de Equipo
+CREATE TABLE IF NOT EXISTS tipos_equipo (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    descripcion TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserción de tipos predeterminados
+INSERT INTO tipos_equipo (id, nombre, descripcion) VALUES
+(1, 'Equipo de Cómputo', 'Computadoras de escritorio, laptops y All-in-One'),
+(2, 'Impresora / Multifuncional', 'Impresoras térmicas, inyección, láser y multifuncionales'),
+(3, 'Monitor / Pantalla', 'Monitores y pantallas de visualización'),
+(4, 'Redes y Comunicaciones', 'Routers, switches, access points y modems'),
+(5, 'Periféricos y Accesorios', 'Teclados, mouse, dockstations, cámaras'),
+(6, 'Servidor / Almacenamiento', 'Servidores físicos, NAS y almacenamiento'),
+(7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
+(8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
+ON CONFLICT (id) DO NOTHING;
+
+-- Tablas de Catálogos Dinámicos
+CREATE TABLE IF NOT EXISTS catalogos_empresas (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS catalogos_bases (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS catalogos_areas (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabla principal de equipos
 CREATE TABLE IF NOT EXISTS equipos (
     id SERIAL PRIMARY KEY,
@@ -36,6 +75,7 @@ CREATE TABLE IF NOT EXISTS equipos (
     personal_asignado VARCHAR(150),
     empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
     estado_id INT REFERENCES estados_equipo(id) DEFAULT 1,
+    tipo_equipo_id INT REFERENCES tipos_equipo(id) DEFAULT 1,
     empresa VARCHAR(100),
     ciudad VARCHAR(100),
     area VARCHAR(100),
@@ -62,6 +102,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(150),
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) DEFAULT 'admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

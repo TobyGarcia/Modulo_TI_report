@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Shield, X, Save, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, X, Save, AlertCircle, Mail, Edit3 } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function UserManagement({ token, currentUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
@@ -13,6 +14,7 @@ export default function UserManagement({ token, currentUser }) {
   const [formData, setFormData] = useState({
     nombre: '',
     username: '',
+    email: '',
     password: '',
     role: 'admin'
   });
@@ -41,12 +43,42 @@ export default function UserManagement({ token, currentUser }) {
   const totalPages = Math.ceil(users.length / pageSize) || 1;
   const currentUsers = users.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const handleCreateUser = async (e) => {
+  const handleOpenAddModal = () => {
+    setEditingUser(null);
+    setFormData({
+      nombre: '',
+      username: '',
+      email: '',
+      password: '',
+      role: 'admin'
+    });
+    setError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (u) => {
+    setEditingUser(u);
+    setFormData({
+      nombre: u.nombre || '',
+      username: u.username || '',
+      email: u.email || '',
+      password: '',
+      role: u.role || 'admin'
+    });
+    setError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = async (e) => {
     e.preventDefault();
     setError(null);
     try {
-      const res = await fetch('/api/usuarios', {
-        method: 'POST',
+      const isEdit = !!editingUser;
+      const url = isEdit ? `/api/usuarios/${editingUser.id}` : '/api/usuarios';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
@@ -55,10 +87,10 @@ export default function UserManagement({ token, currentUser }) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al crear usuario');
+      if (!res.ok) throw new Error(data.error || 'Error al guardar usuario');
 
       setIsModalOpen(false);
-      setFormData({ nombre: '', username: '', password: '', role: 'admin' });
+      setEditingUser(null);
       fetchUsers();
     } catch (err) {
       setError(err.message);
@@ -89,15 +121,15 @@ export default function UserManagement({ token, currentUser }) {
             <Users className="w-6 h-6 text-[#c68a1d]" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios TI</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Administración de cuentas con autorización JWT y asignación de roles.
+              Administración de cuentas autenticadas, roles y correos electrónicos M365.
             </p>
           </div>
         </div>
 
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenAddModal}
           className="flex items-center space-x-2 px-4 py-2.5 bg-black hover:bg-neutral-800 text-[#e6b520] font-bold rounded-xl text-sm shadow transition border border-amber-900/40"
         >
           <UserPlus className="w-4 h-4 text-[#e6b520]" />
@@ -127,9 +159,10 @@ export default function UserManagement({ token, currentUser }) {
                   <th className="p-4">ID</th>
                   <th className="p-4">Nombre Completo</th>
                   <th className="p-4">Usuario</th>
+                  <th className="p-4">Email (M365 / Corporativo)</th>
                   <th className="p-4">Rol</th>
-                  <th className="p-4">Fecha de Creación</th>
-                  <th className="p-4 text-center">Acción</th>
+                  <th className="p-4">Fecha Registro</th>
+                  <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -138,6 +171,16 @@ export default function UserManagement({ token, currentUser }) {
                     <td className="p-4 font-mono text-gray-400 font-bold">#{u.id}</td>
                     <td className="p-4 font-semibold text-gray-900">{u.nombre}</td>
                     <td className="p-4 font-mono font-bold text-black">{u.username}</td>
+                    <td className="p-4">
+                      {u.email ? (
+                        <div className="flex items-center space-x-1.5 text-xs text-indigo-900 font-mono font-medium">
+                          <Mail className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>{u.email}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 font-mono italic">Sin email registrado</span>
+                      )}
+                    </td>
                     <td className="p-4">
                       <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
                         <Shield className="w-3 h-3" />
@@ -148,19 +191,28 @@ export default function UserManagement({ token, currentUser }) {
                       {new Date(u.created_at).toLocaleDateString('es-ES')}
                     </td>
                     <td className="p-4 text-center">
-                      {currentUser?.id !== u.id ? (
+                      <div className="flex items-center justify-center space-x-2">
                         <button
-                          onClick={() => handleDeleteUser(u.id, u.username)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Eliminar usuario"
+                          onClick={() => handleOpenEditModal(u)}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                          title="Editar usuario"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Edit3 className="w-4 h-4" />
                         </button>
-                      ) : (
-                        <span className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                          Sesión Activa
-                        </span>
-                      )}
+                        {currentUser?.id !== u.id ? (
+                          <button
+                            onClick={() => handleDeleteUser(u.id, u.username)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                            title="Eliminar usuario"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+                            Sesión Activa
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -177,23 +229,23 @@ export default function UserManagement({ token, currentUser }) {
         )}
       </div>
 
-      {/* Modal Crear Usuario */}
+      {/* Modal Crear / Editar Usuario */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="flex justify-between items-center bg-indigo-700 px-6 py-4 text-white">
               <h2 className="text-lg font-bold flex items-center space-x-2">
                 <UserPlus className="w-5 h-5" />
-                <span>Crear Nuevo Usuario</span>
+                <span>{editingUser ? 'Editar Usuario TI' : 'Crear Nuevo Usuario TI'}</span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="hover:bg-indigo-600 p-1 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+            <form onSubmit={handleSaveUser} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre Completo</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre Completo *</label>
                 <input
                   type="text"
                   required
@@ -205,7 +257,7 @@ export default function UserManagement({ token, currentUser }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre de Usuario (Username)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre de Usuario (Username) *</label>
                 <input
                   type="text"
                   required
@@ -217,10 +269,23 @@ export default function UserManagement({ token, currentUser }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Contraseña</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Email / Correo M365 (Opcional)</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="ej. cperez@itz.com.mx"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  {editingUser ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña *'}
+                </label>
                 <input
                   type="password"
-                  required
+                  required={!editingUser}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -253,7 +318,7 @@ export default function UserManagement({ token, currentUser }) {
                   className="flex items-center space-x-2 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Crear Usuario</span>
+                  <span>{editingUser ? 'Guardar Cambios' : 'Crear Usuario'}</span>
                 </button>
               </div>
             </form>

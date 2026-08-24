@@ -23,6 +23,19 @@ export default function EquipmentList({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
+  // Filtros activos por catálogos
+  const [filterTipoEquipo, setFilterTipoEquipo] = useState('');
+  const [filterEmpresa, setFilterEmpresa] = useState('');
+  const [filterCiudad, setFilterCiudad] = useState('');
+  const [filterArea, setFilterArea] = useState('');
+
+  const [catalogosOptions, setCatalogosOptions] = useState({
+    tipos_equipo: [],
+    empresas: [],
+    bases: [],
+    areas: []
+  });
+
   // URL o IP para los códigos QR
   const [customBaseUrl, setCustomBaseUrl] = useState(() => {
     const saved = localStorage.getItem('qr_base_url');
@@ -46,13 +59,38 @@ export default function EquipmentList({
 
   const [authError, setAuthError] = useState(false);
 
+  // Cargar catálogos para filtros desplegables
+  useEffect(() => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch('/api/catalogos', { headers })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) {
+          setCatalogosOptions({
+            tipos_equipo: Array.isArray(data.tipos_equipo) ? data.tipos_equipo : [],
+            empresas: Array.isArray(data.empresas) ? data.empresas : [],
+            bases: Array.isArray(data.bases) ? data.bases : [],
+            areas: Array.isArray(data.areas) ? data.areas : []
+          });
+        }
+      })
+      .catch(err => console.error('Error al cargar catálogos para filtros:', err));
+  }, [token]);
+
   const fetchEquipments = async (query = search, filter = statusFilter) => {
     setLoading(true);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const endpoint = filter === 'bajas'
+      let endpoint = filter === 'bajas'
         ? `/api/bajas?q=${encodeURIComponent(query)}`
         : `/api/equipos?q=${encodeURIComponent(query)}`;
+
+      if (filter === 'activos') {
+        if (filterTipoEquipo) endpoint += `&tipo_equipo_id=${encodeURIComponent(filterTipoEquipo)}`;
+        if (filterEmpresa) endpoint += `&empresa=${encodeURIComponent(filterEmpresa)}`;
+        if (filterCiudad) endpoint += `&ciudad=${encodeURIComponent(filterCiudad)}`;
+        if (filterArea) endpoint += `&area=${encodeURIComponent(filterArea)}`;
+      }
 
       const res = await fetch(endpoint, { headers });
       if (res.status === 401 || res.status === 403) {
@@ -77,7 +115,7 @@ export default function EquipmentList({
 
   useEffect(() => {
     fetchEquipments(search, statusFilter);
-  }, [token, statusFilter]);
+  }, [token, statusFilter, filterTipoEquipo, filterEmpresa, filterCiudad, filterArea]);
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
@@ -89,6 +127,14 @@ export default function EquipmentList({
     setStatusFilter(filter);
     setSelectedIds([]);
     fetchEquipments(search, filter);
+  };
+
+  const clearActiveFilters = () => {
+    setFilterTipoEquipo('');
+    setFilterEmpresa('');
+    setFilterCiudad('');
+    setFilterArea('');
+    setSearch('');
   };
 
   const totalPages = Math.ceil(equipments.length / pageSize) || 1;
@@ -237,37 +283,109 @@ export default function EquipmentList({
       </div>
 
       {/* Barra de Filtros, Búsqueda y Selección Masiva */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={handleSearchChange}
-            placeholder={statusFilter === 'bajas' ? "Buscar en bajas por Hostname, Serial, Motivo..." : "Buscar por Hostname, Serial, Persona, Marca, Área..."}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#e6b520] focus:border-black outline-none shadow-sm"
-          />
-        </div>
+      <div className="bg-white p-4 rounded-2xl shadow-sm border space-y-3">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="relative w-full md:w-96">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={handleSearchChange}
+              placeholder={statusFilter === 'bajas' ? "Buscar en bajas por Hostname, Serial, Motivo..." : "Buscar por Hostname, Serial, Persona, Marca, Área..."}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-[#e6b520] focus:border-black outline-none shadow-xs"
+            />
+          </div>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={() => fetchEquipments(search, statusFilter)}
-            className="p-2.5 bg-white border rounded-xl hover:bg-[#e6b520] text-gray-700 hover:text-black transition"
-            title="Recargar"
-          >
-            <RefreshCw className="w-4 h-4 text-[#c68a1d]" />
-          </button>
-
-          {statusFilter === 'activos' && selectedIds.length > 0 && (
+          <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
             <button
-              onClick={handlePrintSelected}
-              className="flex items-center space-x-2 px-4 py-2.5 text-sm font-bold text-black bg-[#e6b520] hover:bg-[#d0a11b] rounded-xl shadow transition border border-[#c68a1d]"
+              onClick={() => fetchEquipments(search, statusFilter)}
+              className="p-2 bg-white border rounded-xl hover:bg-[#e6b520] text-gray-700 hover:text-black transition"
+              title="Recargar"
             >
-              <Printer className="w-4 h-4 text-black" />
-              <span>Imprimir {selectedIds.length} Etiquetas</span>
+              <RefreshCw className="w-4 h-4 text-[#c68a1d]" />
             </button>
-          )}
+
+            {statusFilter === 'activos' && (filterTipoEquipo || filterEmpresa || filterCiudad || filterArea || search) && (
+              <button
+                onClick={clearActiveFilters}
+                className="px-3 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition border border-red-200"
+              >
+                Limpiar Filtros
+              </button>
+            )}
+
+            {statusFilter === 'activos' && selectedIds.length > 0 && (
+              <button
+                onClick={handlePrintSelected}
+                className="flex items-center space-x-2 px-4 py-2 text-xs font-bold text-black bg-[#e6b520] hover:bg-[#d0a11b] rounded-xl shadow transition border border-[#c68a1d]"
+              >
+                <Printer className="w-4 h-4 text-black" />
+                <span>Imprimir {selectedIds.length} Etiquetas</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Desplegables de Filtración Activa por Catálogos */}
+        {statusFilter === 'activos' && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t text-xs">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 mb-1">Categoría / Tipo</label>
+              <select
+                value={filterTipoEquipo}
+                onChange={(e) => setFilterTipoEquipo(e.target.value)}
+                className="w-full border rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-[#e6b520] outline-none"
+              >
+                <option value="">Todas las categorías</option>
+                {catalogosOptions.tipos_equipo.map(t => (
+                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 mb-1">Empresa</label>
+              <select
+                value={filterEmpresa}
+                onChange={(e) => setFilterEmpresa(e.target.value)}
+                className="w-full border rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-[#e6b520] outline-none"
+              >
+                <option value="">Todas las empresas</option>
+                {catalogosOptions.empresas.map(emp => (
+                  <option key={emp.id} value={emp.nombre}>{emp.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 mb-1">Base / Ciudad</label>
+              <select
+                value={filterCiudad}
+                onChange={(e) => setFilterCiudad(e.target.value)}
+                className="w-full border rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-[#e6b520] outline-none"
+              >
+                <option value="">Todas las bases</option>
+                {catalogosOptions.bases.map(b => (
+                  <option key={b.id} value={b.nombre}>{b.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 mb-1">Área / Depto</label>
+              <select
+                value={filterArea}
+                onChange={(e) => setFilterArea(e.target.value)}
+                className="w-full border rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-[#e6b520] outline-none"
+              >
+                <option value="">Todas las áreas</option>
+                {catalogosOptions.areas.map(a => (
+                  <option key={a.id} value={a.nombre}>{a.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla Principal */}
@@ -426,6 +544,9 @@ export default function EquipmentList({
                         />
                       </td>
                       <td className="p-4 font-medium">
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-950 border border-amber-300 mb-1">
+                          {eq.tipo_equipo_nombre || 'Equipo de Cómputo'}
+                        </span>
                         <div className="font-mono text-gray-900 font-bold">{eq.hostname || 'N/A'}</div>
                         <div className="text-xs font-mono text-gray-500">S/N: {eq.serial}</div>
                       </td>

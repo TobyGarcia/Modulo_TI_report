@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check } from 'lucide-react';
+import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check, Mail } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function EmployeeManagement({ token }) {
@@ -212,6 +212,7 @@ export default function EmployeeManagement({ token }) {
               <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
                 <tr>
                   <th className="p-4">Nombre del Empleado</th>
+                  <th className="p-4">Email M365 / Corporativo</th>
                   <th className="p-4">Área / Departamento</th>
                   <th className="p-4">Empresa</th>
                   <th className="p-4">No. Empleado / Puesto</th>
@@ -226,6 +227,16 @@ export default function EmployeeManagement({ token }) {
                         <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
                         <span>{emp.nombre}</span>
                       </div>
+                    </td>
+                    <td className="p-4">
+                      {emp.email ? (
+                        <div className="flex items-center space-x-1.5 text-xs text-indigo-900 font-mono font-medium bg-indigo-50/80 px-2.5 py-1 rounded-lg border border-indigo-100 w-fit">
+                          <Mail className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>{emp.email}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 font-mono italic">Sin email M365</span>
+                      )}
                     </td>
                     <td className="p-4 text-gray-700 font-medium">
                       {emp.area || 'General'}
@@ -307,6 +318,17 @@ export default function EmployeeManagement({ token }) {
                   placeholder="Ej. Carlos Martínez Pérez"
                   required
                   className="w-full bg-white border rounded-xl p-2.5 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Correo Electrónico (M365 / Corporativo)</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="Ej. cmartinez@itz.com.mx"
+                  className="w-full bg-white border rounded-xl p-2.5 font-mono text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 

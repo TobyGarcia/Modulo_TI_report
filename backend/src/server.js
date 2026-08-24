@@ -12,6 +12,7 @@ const asignacionesRoutes = require('./routes/asignaciones.routes');
 const salidasRoutes = require('./routes/salidas.routes');
 const m365Routes = require('./routes/m365.routes');
 const bajasRoutes = require('./routes/bajas.routes');
+const catalogosRoutes = require('./routes/catalogos.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +32,7 @@ app.use('/api/asignaciones', asignacionesRoutes);
 app.use('/api/salidas', salidasRoutes);
 app.use('/api/m365', m365Routes);
 app.use('/api/bajas', bajasRoutes);
+app.use('/api/catalogos', catalogosRoutes);
 
 // Ruta de comprobación de salud del servidor
 app.get('/health', (req, res) => {
@@ -46,10 +48,15 @@ async function initDatabase() {
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(100) NOT NULL,
         username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(150),
         password_hash VARCHAR(255) NOT NULL,
         role VARCHAR(20) DEFAULT 'admin',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    await pool.query(`
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(150);
     `);
 
     // 2. Crear tabla de empleados
@@ -86,10 +93,78 @@ async function initDatabase() {
       ON CONFLICT (id) DO NOTHING;
     `);
 
+    // 3.5. Crear tablas de catálogos y tipos de equipo
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tipos_equipo (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) UNIQUE NOT NULL,
+        descripcion TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS catalogos_empresas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS catalogos_bases (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS catalogos_areas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      INSERT INTO tipos_equipo (id, nombre, descripcion) VALUES
+      (1, 'Equipo de Cómputo', 'Computadoras de escritorio, laptops y All-in-One'),
+      (2, 'Impresora / Multifuncional', 'Impresoras térmicas, inyección, láser y multifuncionales'),
+      (3, 'Monitor / Pantalla', 'Monitores y pantallas de visualización'),
+      (4, 'Redes y Comunicaciones', 'Routers, switches, access points y modems'),
+      (5, 'Periféricos y Accesorios', 'Teclados, mouse, dockstations, cámaras'),
+      (6, 'Servidor / Almacenamiento', 'Servidores físicos, NAS y almacenamiento'),
+      (7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
+      (8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
     // 4. Migración de columnas en equipos
     await pool.query(`
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL;
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS estado_id INT REFERENCES estados_equipo(id) DEFAULT 1;
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS tipo_equipo_id INT REFERENCES tipos_equipo(id) DEFAULT 1;
+      UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id IS NULL;
+    `);
+
+    // 4.5. Extraer catálogos únicos de empresas, bases y áreas a sus respectivas tablas
+    await pool.query(`
+      INSERT INTO catalogos_empresas (nombre)
+      SELECT DISTINCT TRIM(empresa) FROM (
+        SELECT empresa FROM equipos WHERE empresa IS NOT NULL AND TRIM(empresa) != ''
+        UNION
+        SELECT empresa FROM empleados WHERE empresa IS NOT NULL AND TRIM(empresa) != ''
+      ) sub
+      ON CONFLICT (nombre) DO NOTHING;
+
+      INSERT INTO catalogos_bases (nombre)
+      SELECT DISTINCT TRIM(ciudad) FROM (
+        SELECT ciudad FROM equipos WHERE ciudad IS NOT NULL AND TRIM(ciudad) != ''
+      ) sub
+      ON CONFLICT (nombre) DO NOTHING;
+
+      INSERT INTO catalogos_areas (nombre)
+      SELECT DISTINCT TRIM(area) FROM (
+        SELECT area FROM equipos WHERE area IS NOT NULL AND TRIM(area) != ''
+        UNION
+        SELECT area FROM empleados WHERE area IS NOT NULL AND TRIM(area) != ''
+      ) sub
+      ON CONFLICT (nombre) DO NOTHING;
     `);
 
     // 5. Crear tabla de mantenimientos si no existe

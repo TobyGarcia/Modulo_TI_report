@@ -18,17 +18,19 @@ router.get('/info/network-ip', (req, res) => {
 
 // --- Rutas Protegidas (Exclusivas para Personal de TI Autenticado) ---
 
-// Listar equipos con opción de búsqueda y filtro por estado (Protegido)
+// Listar equipos con opción de búsqueda y filtro por estado y catálogos (Protegido)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { q, estado_id, incluir_bajas } = req.query;
+    const { q, estado_id, tipo_equipo_id, empresa, ciudad, area, incluir_bajas } = req.query;
     let query = `
       SELECT e.*, 
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa,
-             st.nombre as estado_nombre, st.descripcion as estado_descripcion
+             st.nombre as estado_nombre, st.descripcion as estado_descripcion,
+             COALESCE(te.nombre, 'Equipo de Cómputo') as tipo_equipo_nombre, te.descripcion as tipo_equipo_descripcion
       FROM equipos e
       LEFT JOIN empleados emp ON e.empleado_id = emp.id
       LEFT JOIN estados_equipo st ON e.estado_id = st.id
+      LEFT JOIN tipos_equipo te ON e.tipo_equipo_id = te.id
     `;
     let conditions = [];
     let params = [];
@@ -55,6 +57,26 @@ router.get('/', authenticateToken, async (req, res) => {
       conditions.push(`(e.estado_id IS NULL OR e.estado_id != 4)`);
     }
 
+    if (tipo_equipo_id) {
+      params.push(parseInt(tipo_equipo_id, 10));
+      conditions.push(`e.tipo_equipo_id = $${params.length}`);
+    }
+
+    if (empresa && empresa.trim() !== '') {
+      params.push(empresa.trim());
+      conditions.push(`(e.empresa = $${params.length} OR emp.empresa = $${params.length})`);
+    }
+
+    if (ciudad && ciudad.trim() !== '') {
+      params.push(ciudad.trim());
+      conditions.push(`e.ciudad = $${params.length}`);
+    }
+
+    if (area && area.trim() !== '') {
+      params.push(area.trim());
+      conditions.push(`(e.area = $${params.length} OR emp.area = $${params.length})`);
+    }
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
@@ -77,10 +99,12 @@ router.get('/:identifier', authenticateToken, async (req, res) => {
     const baseQuery = `
       SELECT e.*, 
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa, emp.no_empleado,
-             st.nombre as estado_nombre, st.descripcion as estado_descripcion
+             st.nombre as estado_nombre, st.descripcion as estado_descripcion,
+             COALESCE(te.nombre, 'Equipo de Cómputo') as tipo_equipo_nombre, te.descripcion as tipo_equipo_descripcion
       FROM equipos e
       LEFT JOIN empleados emp ON e.empleado_id = emp.id
       LEFT JOIN estados_equipo st ON e.estado_id = st.id
+      LEFT JOIN tipos_equipo te ON e.tipo_equipo_id = te.id
     `;
 
     if (!isNaN(identifier)) {
@@ -127,7 +151,7 @@ router.get('/:id/qr', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
-      item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
+      item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     } = req.body;
@@ -156,18 +180,19 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
+    const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
 
     const query = `
       INSERT INTO equipos (
-        item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
+        item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
         gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING *;
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, empresa, ciudad, area, hostname,
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     ];
@@ -193,7 +218,7 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
 
     for (const record of records) {
       const {
-        item, personal_asignado, empresa, ciudad, area, hostname,
+        item, personal_asignado, tipo_equipo_id, tipo_equipo, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
         gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
       } = record;
@@ -217,18 +242,27 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
       }
 
       const stId = empId ? 2 : 1;
+      let targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
+
+      if (!tipo_equipo_id && tipo_equipo && tipo_equipo.trim()) {
+        const teFind = await pool.query('SELECT id FROM tipos_equipo WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))', [tipo_equipo.trim()]);
+        if (teFind.rows.length > 0) {
+          targetTipoEquipoId = teFind.rows[0].id;
+        }
+      }
 
       const upsertQuery = `
         INSERT INTO equipos (
-          item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
+          item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
           marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
           gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         ON CONFLICT (serial) DO UPDATE SET
           item = EXCLUDED.item,
           personal_asignado = EXCLUDED.personal_asignado,
           empleado_id = EXCLUDED.empleado_id,
           estado_id = EXCLUDED.estado_id,
+          tipo_equipo_id = EXCLUDED.tipo_equipo_id,
           empresa = EXCLUDED.empresa,
           ciudad = EXCLUDED.ciudad,
           area = EXCLUDED.area,
@@ -250,7 +284,7 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
       `;
 
       const values = [
-        item ? parseInt(item, 10) : null, pAsignado, empId, stId, empresa, ciudad, area, hostname,
+        item ? parseInt(item, 10) : null, pAsignado, empId, stId, targetTipoEquipoId, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
         gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
       ];
@@ -280,7 +314,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      item, personal_asignado, empleado_id, estado_id, empresa, ciudad, area, hostname,
+      item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
     } = req.body;
@@ -301,19 +335,20 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
+    const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
 
     const query = `
       UPDATE equipos SET
-        item = $1, personal_asignado = $2, empleado_id = $3, estado_id = $4, empresa = $5, ciudad = $6, area = $7, hostname = $8,
-        marca = $9, modelo = $10, serial = $11, so = $12, cpu = $13, ram_capacidad = $14, disco_capacidad = $15,
-        gpu_tipo = $16, gpu_modelo = $17, estado_fisico = $18, mac_wifi = $19, uso_recomendado = $20, observaciones = $21,
+        item = $1, personal_asignado = $2, empleado_id = $3, estado_id = $4, tipo_equipo_id = $5, empresa = $6, ciudad = $7, area = $8, hostname = $9,
+        marca = $10, modelo = $11, serial = $12, so = $13, cpu = $14, ram_capacidad = $15, disco_capacidad = $16,
+        gpu_tipo = $17, gpu_modelo = $18, estado_fisico = $19, mac_wifi = $20, uso_recomendado = $21, observaciones = $22,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $22
+      WHERE id = $23
       RETURNING *;
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, empresa, ciudad, area, hostname,
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
       id

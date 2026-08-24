@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Save, Layers } from 'lucide-react';
 
 const INITIAL_FORM = {
   item: '',
   personal_asignado: '',
+  tipo_equipo_id: 1,
   empresa: '',
   ciudad: '',
   area: '',
@@ -23,16 +24,48 @@ const INITIAL_FORM = {
   observaciones: ''
 };
 
-export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentToEdit }) {
+export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentToEdit, token }) {
   const [formData, setFormData] = useState(INITIAL_FORM);
+  const [catalogos, setCatalogos] = useState({
+    tipos_equipo: [],
+    empresas: [],
+    bases: [],
+    areas: []
+  });
 
   useEffect(() => {
-    if (equipmentToEdit) {
-      setFormData(equipmentToEdit);
-    } else {
-      setFormData(INITIAL_FORM);
+    if (isOpen) {
+      if (equipmentToEdit) {
+        setFormData({
+          ...INITIAL_FORM,
+          ...equipmentToEdit,
+          tipo_equipo_id: equipmentToEdit.tipo_equipo_id || 1
+        });
+      } else {
+        setFormData(INITIAL_FORM);
+      }
+
+      // Cargar catálogos para llenar selectores
+      const storedToken = token || localStorage.getItem('jwt_token');
+      if (storedToken) {
+        fetch('/api/catalogos', {
+          headers: { Authorization: `Bearer ${storedToken}` }
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) {
+              setCatalogos({
+                tipos_equipo: Array.isArray(data.tipos_equipo) ? data.tipos_equipo : [],
+                empresas: Array.isArray(data.empresas) ? data.empresas : [],
+                bases: Array.isArray(data.bases) ? data.bases : [],
+                areas: Array.isArray(data.areas) ? data.areas : []
+              });
+            }
+          })
+          .catch(err => console.error('Error al cargar catálogos en modal:', err));
+      }
     }
-  }, [equipmentToEdit, isOpen]);
+  }, [equipmentToEdit, isOpen, token]);
 
   if (!isOpen) return null;
 
@@ -50,8 +83,9 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full my-8 overflow-hidden">
         <div className="flex justify-between items-center bg-indigo-700 px-6 py-4 text-white">
-          <h2 className="text-xl font-bold">
-            {equipmentToEdit ? 'Editar Equipo' : 'Nuevo Equipo de Cómputo'}
+          <h2 className="text-xl font-bold flex items-center space-x-2">
+            <Layers className="w-5 h-5 text-amber-300" />
+            <span>{equipmentToEdit ? 'Editar Equipo' : 'Nuevo Equipo de Inventario'}</span>
           </h2>
           <button onClick={onClose} className="hover:bg-indigo-600 p-1 rounded-lg transition">
             <X className="w-6 h-6" />
@@ -59,14 +93,34 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-          {/* Datos Generales */}
+          {/* Clasificación de Categoría & Datos Generales */}
           <div>
             <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
-              Información General & Asignación
+              Categoría del Equipo & Asignación
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Ítem</label>
+                <label className="block text-xs font-bold text-indigo-900 mb-1">
+                  Tipo de Equipo / Categoría *
+                </label>
+                <select
+                  name="tipo_equipo_id"
+                  value={formData.tipo_equipo_id || 1}
+                  onChange={handleChange}
+                  className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold bg-indigo-50/50 focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  {catalogos.tipos_equipo.length > 0 ? (
+                    catalogos.tipos_equipo.map(t => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))
+                  ) : (
+                    <option value={1}>Equipo de Cómputo</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Ítem (Número)</label>
                 <input
                   type="number"
                   name="item"
@@ -76,6 +130,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   placeholder="ej. 1"
                 />
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Personal Asignado</label>
                 <input
@@ -87,39 +142,69 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   placeholder="Nombre de la persona"
                 />
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Empresa</label>
                 <input
                   type="text"
                   name="empresa"
+                  list="empresas-list"
                   value={formData.empresa || ''}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Empresa"
+                  placeholder="Ej. ITZ OIL & GAS"
                 />
+                <datalist id="empresas-list">
+                  {catalogos.empresas.map(emp => (
+                    <option key={emp.id} value={emp.nombre} />
+                  ))}
+                </datalist>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Ciudad</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Ciudad / Base</label>
                 <input
                   type="text"
                   name="ciudad"
+                  list="bases-list"
                   value={formData.ciudad || ''}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Ciudad"
+                  placeholder="Ej. San Francisco de Campeche"
                 />
+                <datalist id="bases-list">
+                  {catalogos.bases.map(b => (
+                    <option key={b.id} value={b.nombre} />
+                  ))}
+                </datalist>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Área</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Área / Depto</label>
                 <input
                   type="text"
                   name="area"
+                  list="areas-list"
                   value={formData.area || ''}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="ej. Sistemas, Finanzas"
                 />
+                <datalist id="areas-list">
+                  {catalogos.areas.map(a => (
+                    <option key={a.id} value={a.nombre} />
+                  ))}
+                </datalist>
               </div>
+            </div>
+          </div>
+
+          {/* Especificaciones del Hardware / Equipo */}
+          <div>
+            <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
+              Identificación y Hardware / Especificaciones
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Hostname (Nombre Red)</label>
                 <input
@@ -131,15 +216,6 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   placeholder="PC-SYS-001"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Especificaciones del Hardware */}
-          <div>
-            <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
-              Identificación y Hardware
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Marca</label>
                 <input
@@ -163,7 +239,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Serial (Número de Serie)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Serial (Número de Serie) *</label>
                 <input
                   type="text"
                   name="serial"
@@ -182,11 +258,11 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   value={formData.so || ''}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Windows 11 Pro"
+                  placeholder="Windows 11 Pro / Linux / N/A"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">CPU (Modelo/Generación)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">CPU (Procesador)</label>
                 <input
                   type="text"
                   name="cpu"
@@ -230,24 +306,13 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   <option value="Dedicada">Dedicada</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Modelo GPU</label>
-                <input
-                  type="text"
-                  name="gpu_modelo"
-                  value={formData.gpu_modelo || ''}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Nvidia RTX 3050 / Iris Xe"
-                />
-              </div>
             </div>
           </div>
 
           {/* Detalles Técnicos Adicionales */}
           <div>
             <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
-              Red & Estado
+              Red & Estado Físico
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>

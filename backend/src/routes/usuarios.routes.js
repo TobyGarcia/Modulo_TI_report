@@ -12,7 +12,7 @@ router.use(authenticateToken);
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nombre, username, role, created_at FROM usuarios ORDER BY id ASC'
+      'SELECT id, nombre, username, email, role, created_at FROM usuarios ORDER BY id ASC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -24,14 +24,14 @@ router.get('/', async (req, res) => {
 // Crear un nuevo usuario con contraseña encriptada en bcrypt
 router.post('/', async (req, res) => {
   try {
-    const { nombre, username, password, role } = req.body;
+    const { nombre, username, email, password, role } = req.body;
 
     if (!nombre || !username || !password) {
       return res.status(400).json({ error: 'Nombre, usuario y contraseña son requeridos' });
     }
 
     // Verificar si el usuario ya existe
-    const existing = await pool.query('SELECT id FROM usuarios WHERE username = $1', [username]);
+    const existing = await pool.query('SELECT id FROM usuarios WHERE username = $1', [username.trim()]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'El nombre de usuario ya está registrado' });
     }
@@ -41,17 +41,63 @@ router.post('/', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const query = `
-      INSERT INTO usuarios (nombre, username, password_hash, role)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, nombre, username, role, created_at;
+      INSERT INTO usuarios (nombre, username, email, password_hash, role)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, nombre, username, email, role, created_at;
     `;
-    const values = [nombre, username, passwordHash, role || 'admin'];
+    const values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, role || 'admin'];
 
     const result = await pool.query(query, values);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Error al crear usuario:', err);
     res.status(500).json({ error: err.message || 'Error al guardar usuario' });
+  }
+});
+
+// Editar usuario
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, username, email, password, role } = req.body;
+
+    if (!nombre || !username) {
+      return res.status(400).json({ error: 'Nombre y usuario son requeridos' });
+    }
+
+    let passwordHash = null;
+    if (password && password.trim() !== '') {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    let query;
+    let values;
+
+    if (passwordHash) {
+      query = `
+        UPDATE usuarios SET nombre = $1, username = $2, email = $3, password_hash = $4, role = COALESCE($5, role)
+        WHERE id = $6
+        RETURNING id, nombre, username, email, role, created_at;
+      `;
+      values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, role, id];
+    } else {
+      query = `
+        UPDATE usuarios SET nombre = $1, username = $2, email = $3, role = COALESCE($4, role)
+        WHERE id = $5
+        RETURNING id, nombre, username, email, role, created_at;
+      `;
+      values = [nombre.trim(), username.trim(), email ? email.trim() : null, role, id];
+    }
+
+    const result = await pool.query(query, values);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al actualizar usuario:', err);
+    res.status(500).json({ error: err.message || 'Error al actualizar usuario' });
   }
 });
 

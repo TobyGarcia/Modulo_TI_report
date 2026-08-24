@@ -11,6 +11,7 @@ import BitacoraView from './components/BitacoraView';
 import EmployeeManagement from './components/EmployeeManagement';
 import SalidasView from './components/SalidasView';
 import M365View from './components/M365View';
+import CatalogosView from './components/CatalogosView';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -216,6 +217,9 @@ export default function App() {
               onImportClick={() => setIsImportModalOpen(true)}
               onPrintLabelsClick={handleOpenPrintView}
             />
+          )}
+          {activeTab === 'catalogos' && (
+            <CatalogosView token={token} />
           )}
           {activeTab === 'empleados' && (
             <EmployeeManagement token={token} />
