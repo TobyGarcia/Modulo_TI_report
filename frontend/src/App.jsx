@@ -165,7 +165,7 @@ export default function App() {
     if (!token) {
       return <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={true} />;
     }
-    return <ScanResultView equipmentId={scanId} token={token} onLogout={handleLogout} />;
+    return <ScanResultView equipmentId={scanId} token={token} onLogout={handleLogout} currentUser={user} />;
   }
 
   // 2. Si no ha iniciado sesión, mostrar la pantalla de Login
@@ -210,6 +210,7 @@ export default function App() {
           {activeTab === 'inventory' && (
             <EquipmentList
               token={token}
+              currentUser={user}
               onAddClick={handleOpenAddModal}
               onEditClick={handleOpenEditModal}
               onImportClick={() => setIsImportModalOpen(true)}

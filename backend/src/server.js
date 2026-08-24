@@ -11,6 +11,7 @@ const empleadosRoutes = require('./routes/empleados.routes');
 const asignacionesRoutes = require('./routes/asignaciones.routes');
 const salidasRoutes = require('./routes/salidas.routes');
 const m365Routes = require('./routes/m365.routes');
+const bajasRoutes = require('./routes/bajas.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,7 @@ app.use('/api/empleados', empleadosRoutes);
 app.use('/api/asignaciones', asignacionesRoutes);
 app.use('/api/salidas', salidasRoutes);
 app.use('/api/m365', m365Routes);
+app.use('/api/bajas', bajasRoutes);
 
 // Ruta de comprobación de salud del servidor
 app.get('/health', (req, res) => {
@@ -213,6 +215,28 @@ async function initDatabase() {
         firma_ti TEXT,
         coordinador_ti VARCHAR(150) DEFAULT 'Alejandro del Carmen Huchin Aban',
         estado VARCHAR(20) DEFAULT 'activo',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 6.3. Crear tabla bajas_equipos si no existe
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bajas_equipos (
+        id SERIAL PRIMARY KEY,
+        codigo_formato VARCHAR(50) DEFAULT 'R3PTI1',
+        equipo_id INT REFERENCES equipos(id) ON DELETE CASCADE,
+        motivo VARCHAR(200) NOT NULL,
+        observaciones TEXT,
+        imagenes_evidencia JSONB DEFAULT '[]',
+        solicitante_nombre VARCHAR(150),
+        solicitante_cargo VARCHAR(100),
+        firma_solicita TEXT,
+        autoriza_nombre VARCHAR(150),
+        autoriza_cargo VARCHAR(100),
+        firma_autoriza TEXT NOT NULL,
+        ciudad VARCHAR(150) DEFAULT 'San Francisco de Campeche, Campeche',
+        fecha_baja TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );

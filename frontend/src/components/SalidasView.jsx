@@ -339,8 +339,8 @@ export default function SalidasView({ token, currentUser }) {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <div className="bg-amber-100 p-2.5 rounded-xl border border-amber-200">
-              <ExternalLink className="w-6 h-6 text-amber-700" />
+            <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+              <ExternalLink className="w-6 h-6 text-[#c68a1d]" />
             </div>
             <div>
               <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Salidas de Equipos Informáticos</h2>
@@ -351,9 +351,9 @@ export default function SalidasView({ token, currentUser }) {
 
         <button
           onClick={handleOpenAddModal}
-          className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg"
+          className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-[#e6b520] hover:bg-[#d0a11b] text-black font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg border border-[#c68a1d]"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 text-black stroke-[3]" />
           <span>Nueva Solicitud de Salida</span>
         </button>
       </div>
@@ -367,7 +367,7 @@ export default function SalidasView({ token, currentUser }) {
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por solicitante, serie, modelo, dept..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
+            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-[#e6b520] focus:border-black focus:bg-white transition"
           />
         </div>
 

@@ -269,8 +269,8 @@ export default function M365View({ token, currentUser }) {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <div className="bg-blue-100 p-2.5 rounded-xl border border-blue-200">
-              <Mail className="w-6 h-6 text-blue-700" />
+            <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+              <Mail className="w-6 h-6 text-[#c68a1d]" />
             </div>
             <div>
               <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Solicitud de Cuentas Microsoft 365</h2>
@@ -281,9 +281,9 @@ export default function M365View({ token, currentUser }) {
 
         <button
           onClick={handleOpenAddModal}
-          className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg"
+          className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-[#e6b520] hover:bg-[#d0a11b] text-black font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg border border-[#c68a1d]"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 text-black stroke-[3]" />
           <span>Nueva Solicitud M365</span>
         </button>
       </div>

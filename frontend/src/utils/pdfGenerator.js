@@ -1502,5 +1502,277 @@ export function generarFormatoM365PDF(solicitudData, opciones = {}) {
   doc.save(filename);
 }
 
+/**
+ * Genera el PDF Oficial de Baja de Activos TI (Formato SGI R3PTI1, Versión 00)
+ */
+export function generarFormatoBajaPDF(bajaData, equipoData) {
+  const doc = new jsPDF({
+    orientation: 'p',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2;
+
+  // --- ENCABEZADO OFICIAL SGI ---
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, 22); // Cuadro exterior
+
+  // Líneas divisorias verticales
+  doc.line(margin + 45, margin, margin + 45, margin + 22);
+  doc.line(margin + 135, margin, margin + 135, margin + 22);
+  doc.line(margin + 160, margin, margin + 160, margin + 22);
+
+  // Logo Oficial ITZ OIL & GAS en Columna 1
+  try {
+    doc.addImage(LOGO_ITZ_BASE64, 'JPEG', margin + 2.5, margin + 2.5, 40, 17);
+  } catch (e) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('ITZ', margin + 8, margin + 11);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OIL & GAS', margin + 8, margin + 16);
+  }
+
+  // Título y Código en Columna 2
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('CÓDIGO', margin + 90, margin + 9, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text('R3PTI1', margin + 90, margin + 16, { align: 'center' });
+
+  // Tabla lateral derecha (Sistema, Versión, Página)
+  doc.line(margin + 135, margin + 7, margin + contentWidth, margin + 7);
+  doc.line(margin + 135, margin + 14, margin + contentWidth, margin + 14);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema:', margin + 137, margin + 5);
+  doc.text('SGI', margin + 163, margin + 5);
+
+  doc.text('Versión:', margin + 137, margin + 12);
+  doc.text('00', margin + 163, margin + 12);
+
+  doc.text('Página:', margin + 137, margin + 19);
+  doc.text('1 de 1', margin + 163, margin + 19);
+
+  // --- BARRA AMARILLA CON TÍTULO DEL DOCUMENTO ---
+  let currentY = margin + 22;
+  doc.setFillColor(245, 175, 0); // Amarillo ITZ
+  doc.rect(margin, currentY, contentWidth, 7, 'F');
+  doc.rect(margin, currentY, contentWidth, 7, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('B A J A   D E   A C T I V O S   T I', margin + (contentWidth / 2), currentY + 4.8, { align: 'center' });
+
+  currentY += 7;
+
+  // --- TEXTO DE ACTA ---
+  const fechaObj = bajaData?.fecha_baja ? new Date(bajaData.fecha_baja) : new Date();
+  const dia = String(fechaObj.getDate()).padStart(2, '0');
+  const mes = String(fechaObj.getMonth() + 1).padStart(2, '0');
+  const anio = fechaObj.getFullYear();
+  const fechaFormateada = `${dia}/${mes}/${anio}`;
+
+  const textoActa = `Siendo el día ${fechaFormateada} en la Ciudad de Campeche mediante el presente acto se realiza la Baja de Activos (equipos y/o herramientas) pertenecientes a Servicios Industriales y de Ingeniería Itzamná, S.A. de C.V.`;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.rect(margin, currentY, contentWidth, 10);
+  doc.text(textoActa, margin + 3, currentY + 4, { maxWidth: contentWidth - 6 });
+
+  currentY += 10;
+
+  // --- TABLA DE ACTIVOS ---
+  const colW = [12, 60, 20, 20, 34, 40]; // Anchos de columna
+  const headers = ['ITEM', 'DESCRIPCION', 'CANTIDAD', 'UNIDAD', 'N° DE SERIE', 'OBSERVACIONES'];
+  
+  // Encabezado de tabla
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, currentY, contentWidth, 5, 'F');
+  doc.rect(margin, currentY, contentWidth, 5, 'S');
+
+  let curX = margin;
+  for (let i = 0; i < headers.length; i++) {
+    doc.text(headers[i], curX + colW[i] / 2, currentY + 3.5, { align: 'center' });
+    if (i < headers.length - 1) {
+      curX += colW[i];
+      doc.line(curX, currentY, curX, currentY + 5);
+    }
+  }
+
+  currentY += 5;
+
+  // Filas de la tabla (10 filas en total)
+  const numRows = 10;
+  const rowH = 6;
+
+  for (let r = 0; r < numRows; r++) {
+    doc.rect(margin, currentY, contentWidth, rowH);
+    
+    let xPos = margin;
+    for (let c = 0; c < colW.length - 1; c++) {
+      xPos += colW[c];
+      doc.line(xPos, currentY, xPos, currentY + rowH);
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+
+    if (r === 0) {
+      // Datos del equipo que se da de baja
+      doc.text('1', margin + colW[0] / 2, currentY + 4, { align: 'center' });
+      
+      const descText = `${equipoData.marca || ''} ${equipoData.modelo || ''} (${equipoData.hostname || 'S/N Host'})`.trim();
+      doc.text(descText.substring(0, 35), margin + colW[0] + 2, currentY + 4);
+      
+      doc.text('1', margin + colW[0] + colW[1] + colW[2] / 2, currentY + 4, { align: 'center' });
+      doc.text('PZA', margin + colW[0] + colW[1] + colW[2] + colW[3] / 2, currentY + 4, { align: 'center' });
+      doc.text(String(equipoData.serial || 'N/A'), margin + colW[0] + colW[1] + colW[2] + colW[3] + 2, currentY + 4);
+      
+      const obsText = `${bajaData.motivo || ''} ${bajaData.observaciones ? '- ' + bajaData.observaciones : ''}`.trim();
+      doc.text(obsText.substring(0, 24), margin + colW[0] + colW[1] + colW[2] + colW[3] + colW[4] + 2, currentY + 4);
+    }
+
+    currentY += rowH;
+  }
+
+  // --- REPORTE FOTOGRÁFICO ---
+  doc.setFillColor(245, 175, 0); // Amarillo ITZ
+  doc.rect(margin, currentY, contentWidth, 5, 'F');
+  doc.rect(margin, currentY, contentWidth, 5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text('R E P O R T E   F O T O G R A F I C O', margin + (contentWidth / 2), currentY + 3.5, { align: 'center' });
+
+  currentY += 5;
+
+  const photoBoxH = 50;
+  doc.rect(margin, currentY, contentWidth, photoBoxH);
+
+  // Renderizar imágenes de evidencia si existen
+  let imgs = [];
+  try {
+    imgs = Array.isArray(bajaData.imagenes_evidencia) 
+      ? bajaData.imagenes_evidencia 
+      : (typeof bajaData.imagenes_evidencia === 'string' ? JSON.parse(bajaData.imagenes_evidencia) : []);
+  } catch (e) {
+    imgs = [];
+  }
+
+  if (imgs.length > 0) {
+    const maxImgs = Math.min(imgs.length, 4);
+    const imgW = (contentWidth - 10 - (maxImgs - 1) * 5) / maxImgs;
+    const imgH = photoBoxH - 8;
+
+    for (let i = 0; i < maxImgs; i++) {
+      try {
+        const posX = margin + 5 + i * (imgW + 5);
+        const posY = currentY + 4;
+        doc.addImage(imgs[i], 'JPEG', posX, posY, imgW, imgH);
+      } catch (err) {
+        console.error('Error al agregar imagen de evidencia al PDF:', err);
+      }
+    }
+  } else {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text('(Sin imágenes de evidencia adjuntas)', margin + (contentWidth / 2), currentY + (photoBoxH / 2), { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  currentY += photoBoxH;
+
+  // --- DECLARACIÓN FINAL ---
+  doc.rect(margin, currentY, contentWidth, 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  const textoDeclara = `Quien declara la baja definitiva de los Activos (equipos y/o herramientas) mencionados los cuáles no repercutirán en futuros servicios u operaciones correspondientes a Servicios Industriales y de Ingeniería Itzamná, S.A. de C.V.`;
+  doc.text(textoDeclara, margin + 3, currentY + 4, { maxWidth: contentWidth - 6 });
+
+  currentY += 10;
+
+  // --- SECCIÓN DE FIRMAS (SOLICITA / AUTORIZA) ---
+  const firmaBoxH = 38;
+  const colFirmaW = contentWidth / 2;
+
+  doc.rect(margin, currentY, contentWidth, firmaBoxH);
+  doc.line(margin + colFirmaW, currentY, margin + colFirmaW, currentY + firmaBoxH);
+
+  // Encabezados de firmas
+  doc.setFillColor(245, 175, 0);
+  doc.rect(margin + 10, currentY + 2, 45, 4, 'F');
+  doc.rect(margin + 10, currentY + 2, 45, 4, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('SOLICITA', margin + 32.5, currentY + 5, { align: 'center' });
+
+  doc.rect(margin + colFirmaW + 10, currentY + 2, 45, 4, 'F');
+  doc.rect(margin + colFirmaW + 10, currentY + 2, 45, 4, 'S');
+  doc.text('AUTORIZA', margin + colFirmaW + 32.5, currentY + 5, { align: 'center' });
+
+  // Renderizar Firma Solicita
+  if (bajaData.firma_solicita) {
+    try {
+      doc.addImage(bajaData.firma_solicita, 'PNG', margin + 25, currentY + 7, 40, 15);
+    } catch (e) {}
+  }
+
+  // Renderizar Firma Autoriza (Jefe de TI)
+  if (bajaData.firma_autoriza) {
+    try {
+      doc.addImage(bajaData.firma_autoriza, 'PNG', margin + colFirmaW + 25, currentY + 7, 40, 15);
+    } catch (e) {}
+  }
+
+  // Datos SOLICITA
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.text('NOMBRE:', margin + 4, currentY + 25);
+  doc.setFont('helvetica', 'normal');
+  doc.text(bajaData.solicitante_nombre || 'N/A', margin + 20, currentY + 25);
+  doc.line(margin + 20, currentY + 26, margin + colFirmaW - 5, currentY + 26);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('CARGO:', margin + 4, currentY + 30);
+  doc.setFont('helvetica', 'normal');
+  doc.text(bajaData.solicitante_cargo || 'Soporte Técnico TI', margin + 20, currentY + 30);
+  doc.line(margin + 20, currentY + 31, margin + colFirmaW - 5, currentY + 31);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('FIRMA:', margin + 4, currentY + 35);
+  doc.line(margin + 20, currentY + 36, margin + colFirmaW - 5, currentY + 36);
+
+  // Datos AUTORIZA
+  doc.setFont('helvetica', 'bold');
+  doc.text('NOMBRE:', margin + colFirmaW + 4, currentY + 25);
+  doc.setFont('helvetica', 'normal');
+  doc.text(bajaData.autoriza_nombre || 'Alejandro del Carmen Huchin Aban', margin + colFirmaW + 20, currentY + 25);
+  doc.line(margin + colFirmaW + 20, currentY + 26, margin + contentWidth - 5, currentY + 26);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('CARGO:', margin + colFirmaW + 4, currentY + 30);
+  doc.setFont('helvetica', 'normal');
+  doc.text(bajaData.autoriza_cargo || 'Jefe de TI', margin + colFirmaW + 20, currentY + 30);
+  doc.line(margin + colFirmaW + 20, currentY + 31, margin + contentWidth - 5, currentY + 31);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('FIRMA:', margin + colFirmaW + 4, currentY + 35);
+  doc.line(margin + colFirmaW + 20, currentY + 36, margin + contentWidth - 5, currentY + 36);
+
+  const filename = `Acta_Baja_Activos_TI_${equipoData.serial || equipoData.hostname || 'R3PTI1'}.pdf`;
+  doc.save(filename);
+}
+
 
 

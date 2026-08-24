@@ -85,8 +85,8 @@ export default function UserManagement({ token, currentUser }) {
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border">
         <div className="flex items-center space-x-3">
-          <div className="bg-indigo-100 p-3 rounded-2xl text-indigo-700">
-            <Users className="w-6 h-6" />
+          <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+            <Users className="w-6 h-6 text-[#c68a1d]" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h1>
@@ -98,9 +98,9 @@ export default function UserManagement({ token, currentUser }) {
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm shadow transition"
+          className="flex items-center space-x-2 px-4 py-2.5 bg-black hover:bg-neutral-800 text-[#e6b520] font-bold rounded-xl text-sm shadow transition border border-amber-900/40"
         >
-          <UserPlus className="w-4 h-4" />
+          <UserPlus className="w-4 h-4 text-[#e6b520]" />
           <span>Nuevo Usuario</span>
         </button>
       </div>
@@ -116,7 +116,7 @@ export default function UserManagement({ token, currentUser }) {
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-gray-500">
-            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <div className="w-8 h-8 border-4 border-[#e6b520] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
             Cargando usuarios...
           </div>
         ) : (
@@ -134,10 +134,10 @@ export default function UserManagement({ token, currentUser }) {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {currentUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50 transition">
+                  <tr key={u.id} className="hover:bg-amber-50/40 transition">
                     <td className="p-4 font-mono text-gray-400 font-bold">#{u.id}</td>
                     <td className="p-4 font-semibold text-gray-900">{u.nombre}</td>
-                    <td className="p-4 font-mono font-medium text-indigo-900">{u.username}</td>
+                    <td className="p-4 font-mono font-bold text-black">{u.username}</td>
                     <td className="p-4">
                       <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
                         <Shield className="w-3 h-3" />

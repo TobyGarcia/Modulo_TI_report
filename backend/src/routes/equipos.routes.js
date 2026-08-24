@@ -18,10 +18,10 @@ router.get('/info/network-ip', (req, res) => {
 
 // --- Rutas Protegidas (Exclusivas para Personal de TI Autenticado) ---
 
-// Listar equipos con opción de búsqueda (Protegido)
+// Listar equipos con opción de búsqueda y filtro por estado (Protegido)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { q } = req.query;
+    const { q, estado_id, incluir_bajas } = req.query;
     let query = `
       SELECT e.*, 
              emp.nombre as empleado_nombre, emp.area as empleado_area, emp.empresa as empleado_empresa,
@@ -30,19 +30,33 @@ router.get('/', authenticateToken, async (req, res) => {
       LEFT JOIN empleados emp ON e.empleado_id = emp.id
       LEFT JOIN estados_equipo st ON e.estado_id = st.id
     `;
+    let conditions = [];
     let params = [];
 
     if (q) {
-      query += ` WHERE 
-        e.hostname ILIKE $1 OR 
-        e.serial ILIKE $1 OR 
-        e.personal_asignado ILIKE $1 OR 
-        emp.nombre ILIKE $1 OR
-        e.marca ILIKE $1 OR 
-        e.modelo ILIKE $1 OR 
-        e.area ILIKE $1 OR 
-        e.empresa ILIKE $1`;
       params.push(`%${q}%`);
+      conditions.push(`(
+        e.hostname ILIKE $${params.length} OR 
+        e.serial ILIKE $${params.length} OR 
+        e.personal_asignado ILIKE $${params.length} OR 
+        emp.nombre ILIKE $${params.length} OR
+        e.marca ILIKE $${params.length} OR 
+        e.modelo ILIKE $${params.length} OR 
+        e.area ILIKE $${params.length} OR 
+        e.empresa ILIKE $${params.length}
+      )`);
+    }
+
+    if (estado_id) {
+      params.push(parseInt(estado_id, 10));
+      conditions.push(`e.estado_id = $${params.length}`);
+    } else if (incluir_bajas !== 'true') {
+      // Por defecto no incluir equipos dados de baja (estado_id = 4)
+      conditions.push(`(e.estado_id IS NULL OR e.estado_id != 4)`);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY e.id DESC';

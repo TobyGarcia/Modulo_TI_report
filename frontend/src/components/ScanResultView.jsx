@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import {
   Laptop, Cpu, HardDrive, Cpu as GpuIcon, User, Building2, MapPin,
   CheckCircle, Wifi, FileText, AlertTriangle, LogOut, Calendar, Plus, History, Download, Wrench,
-  UserCheck, UserPlus, ArrowRightLeft, ShieldCheck
+  UserCheck, UserPlus, ArrowRightLeft, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 import ScheduleMaintenanceModal from './ScheduleMaintenanceModal';
 import MaintenanceReportModal from './MaintenanceReportModal';
 import AssignmentModal from './AssignmentModal';
 import UnassignmentModal from './UnassignmentModal';
-import { generarReportePDF, generarFormatoAsignacionPDF, generarFormatoDesasignacionPDF } from '../utils/pdfGenerator';
+import BajaModal from './BajaModal';
+import { generarReportePDF, generarFormatoAsignacionPDF, generarFormatoDesasignacionPDF, generarFormatoBajaPDF } from '../utils/pdfGenerator';
 
-export default function ScanResultView({ equipmentId, token, onLogout }) {
+export default function ScanResultView({ equipmentId, token, onLogout, currentUser }) {
   const [equipo, setEquipo] = useState(null);
   const [historialMantenimientos, setHistorialMantenimientos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,9 +23,10 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedMaintenance, setSelectedMaintenance] = useState(null);
 
-  // Modales Asignación / Desasignación
+  // Modales Asignación / Desasignación / Baja
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [isUnassignmentModalOpen, setIsUnassignmentModalOpen] = useState(false);
+  const [isBajaModalOpen, setIsBajaModalOpen] = useState(false);
 
   const fetchEquipoYHistorial = async () => {
     try {
@@ -108,7 +110,6 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
     setIsAssignmentModalOpen(false);
     fetchEquipoYHistorial();
 
-    // Generar automáticamente el Formato PDF de Asignación (R1PTI2)
     try {
       generarFormatoAsignacionPDF(data.historial, data.equipo, data.empleado);
     } catch (e) {
@@ -123,10 +124,8 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
     fetchEquipoYHistorial();
 
     try {
-      // 1. Generar PDF de Desasignación (R3PTI2)
       generarFormatoDesasignacionPDF(data.historial, data.equipo, data.empleadoAnterior, data.motivo);
 
-      // 2. Si fue reasignación directa, generar también el PDF de Asignación para el nuevo usuario
       if (data.isReassign && data.nuevoEmpleado) {
         setTimeout(() => {
           generarFormatoAsignacionPDF(data.historial, data.equipo, data.nuevoEmpleado);
@@ -136,6 +135,19 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
       console.error('Error al generar PDF de Desasignación:', e);
     }
     alert('¡Proceso completado con éxito y Formato(s) PDF generado(s)!');
+  };
+
+  const handleDownloadBajaPDF = async () => {
+    try {
+      const res = await fetch(`/api/bajas/equipo/${equipmentId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No se encontró el registro de baja de este equipo');
+      const bajaData = await res.json();
+      generarFormatoBajaPDF(bajaData, equipo);
+    } catch (err) {
+      alert(err.message || 'Error al descargar el PDF de baja');
+    }
   };
 
   if (loading) {
@@ -169,6 +181,7 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
     );
   }
 
+  const isBaja = equipo.estado_id === 4 || equipo.estado_nombre === 'Baja';
   const isAssigned = !!(equipo.empleado_id || (equipo.personal_asignado && equipo.personal_asignado.trim() && equipo.personal_asignado !== 'No asignado'));
 
   return (
@@ -187,8 +200,28 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
         </div>
       )}
 
+      {/* Banner si el Equipo ya fue Dado de Baja */}
+      {isBaja && (
+        <div className="bg-red-700 text-white rounded-2xl p-4 shadow-lg border-2 border-red-500 space-y-2">
+          <div className="flex items-center space-x-2 font-bold text-sm">
+            <ShieldAlert className="w-5 h-5 shrink-0 text-amber-300" />
+            <span>¡EQUIPO DADO DE BAJA DE INVENTARIO!</span>
+          </div>
+          <p className="text-xs text-red-100 leading-relaxed">
+            Este activo fue desincorporado del servicio operativo mediante Acta Oficial Formato SGI R3PTI1.
+          </p>
+          <button
+            onClick={handleDownloadBajaPDF}
+            className="w-full mt-2 py-2 px-3 bg-white text-red-900 font-bold rounded-xl text-xs shadow hover:bg-red-50 flex items-center justify-center space-x-1.5 transition-colors"
+          >
+            <Download className="w-4 h-4 text-red-700" />
+            <span>Descargar Acta Oficial de Baja (R3PTI1 PDF)</span>
+          </button>
+        </div>
+      )}
+
       {/* Banner de Mantenimiento Programado */}
-      {(() => {
+      {!isBaja && (() => {
         const safeHistorial = Array.isArray(historialMantenimientos) ? historialMantenimientos : [];
         const pendiente = safeHistorial.find(m => m && m.estado === 'programado');
         if (!pendiente) return null;
@@ -223,14 +256,16 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
       {/* Tarjeta Ficha Móvil */}
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden border">
         {/* Encabezado Principal */}
-        <div className="bg-gradient-to-r from-indigo-700 to-purple-700 p-6 text-white text-center relative">
+        <div className={`p-6 text-white text-center relative ${
+          isBaja ? 'bg-gradient-to-r from-red-800 to-amber-900' : 'bg-gradient-to-r from-indigo-700 to-purple-700'
+        }`}>
           <Laptop className="w-12 h-12 mx-auto mb-2 opacity-90" />
           <h1 className="text-2xl font-bold font-mono tracking-tight">{equipo.hostname || 'SIN HOSTNAME'}</h1>
           <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mt-1">
             Serial: {equipo.serial}
           </p>
           <div className="inline-block mt-3 px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium backdrop-blur-sm">
-            {equipo.marca} {equipo.modelo}
+            {equipo.marca} {equipo.modelo} {isBaja && '• [DADO DE BAJA]'}
           </div>
         </div>
 
@@ -255,70 +290,96 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
           </button>
         </div>
 
-        {/* PANEL 1: ACCIONES RÁPIDAS DE MANTENIMIENTO Y ASIGNACIÓN */}
-        <div className="p-4 bg-indigo-50/70 border-b space-y-2">
-          {/* Botón de Asignación / Desasignación según el Estado */}
-          {!isAssigned ? (
-            <button
-              onClick={() => setIsAssignmentModalOpen(true)}
-              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Asignar Equipo (Actualmente en Resguardo)</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsUnassignmentModalOpen(true)}
-              className="w-full py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span>Desasignar / Reasignar Equipo</span>
-            </button>
-          )}
+        {/* PANEL 1: ACCIONES RÁPIDAS DE MANTENIMIENTO, ASIGNACIÓN Y BAJA */}
+        {!isBaja ? (
+          <div className="p-4 bg-indigo-50/70 border-b space-y-2">
+            {/* Botón de Asignación / Desasignación según el Estado */}
+            {!isAssigned ? (
+              <button
+                onClick={() => setIsAssignmentModalOpen(true)}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Asignar Equipo (Actualmente en Resguardo)</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsUnassignmentModalOpen(true)}
+                className="w-full py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>Desasignar / Reasignar Equipo</span>
+              </button>
+            )}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsScheduleModalOpen(true)}
-              className="flex-1 py-2.5 px-3 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-1.5 transition-all"
-            >
-              <Calendar className="w-4 h-4 text-indigo-600" />
-              <span>Programar</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsScheduleModalOpen(true)}
+                className="flex-1 py-2.5 px-3 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-1.5 transition-all"
+              >
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <span>Programar</span>
+              </button>
 
+              <button
+                onClick={() => {
+                  setSelectedMaintenance(null);
+                  setIsReportModalOpen(true);
+                }}
+                className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Reporte</span>
+              </button>
+            </div>
+
+            {/* Botón Prominente de Baja de Equipos */}
             <button
-              onClick={() => {
-                setSelectedMaintenance(null);
-                setIsReportModalOpen(true);
-              }}
-              className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all"
+              onClick={() => setIsBajaModalOpen(true)}
+              className="w-full py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
             >
-              <Plus className="w-4 h-4" />
-              <span>Levantar Reporte</span>
+              <ShieldAlert className="w-4 h-4 text-amber-300" />
+              <span>Dar de Baja Equipo (Acta R3PTI1)</span>
             </button>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 bg-red-50 border-b text-center space-y-2 text-xs">
+            <p className="font-bold text-red-900">Acciones restringidas: Equipo Dado de Baja</p>
+            <p className="text-red-700 text-[11px]">Este equipo ya no se encuentra disponible para asignación o mantenimiento.</p>
+          </div>
+        )}
 
         {/* PANEL 2: FICHA DEL EQUIPO */}
         {activeTab === 'info' && (
           <div className="p-5 space-y-5">
             {/* Estado de Asignación */}
             <div className={`rounded-xl p-4 border space-y-2 ${
-              isAssigned ? 'bg-indigo-50/40 border-indigo-100' : 'bg-emerald-50/50 border-emerald-200'
+              isBaja
+                ? 'bg-red-50 border-red-200'
+                : isAssigned
+                ? 'bg-indigo-50/40 border-indigo-100'
+                : 'bg-emerald-50/50 border-emerald-200'
             }`}>
               <div className="flex justify-between items-center text-sm font-semibold">
                 <div className="flex items-center space-x-2 text-indigo-900">
                   <User className="w-4 h-4 text-indigo-600" />
-                  <span>Personal Asignado</span>
+                  <span>Estado del Equipo</span>
                 </div>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                  isAssigned ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                  isBaja
+                    ? 'bg-red-100 text-red-800 border border-red-300'
+                    : isAssigned
+                    ? 'bg-indigo-100 text-indigo-800'
+                    : 'bg-emerald-100 text-emerald-800'
                 }`}>
-                  {isAssigned ? 'ASIGNADO' : 'EN RESGUARDO'}
+                  {isBaja ? 'DADO DE BAJA' : isAssigned ? 'ASIGNADO' : 'EN RESGUARDO'}
                 </span>
               </div>
 
               <p className="text-base font-bold text-gray-900 pl-6">
-                {equipo.empleado_nombre || equipo.personal_asignado || 'No asignado (Equipo en Resguardo)'}
+                {isBaja
+                  ? 'Baja Definitiva del Inventario'
+                  : equipo.empleado_nombre || equipo.personal_asignado || 'No asignado (Equipo en Resguardo)'}
               </p>
 
               <div className="grid grid-cols-2 gap-2 pl-6 pt-2 text-xs text-gray-600 border-t border-indigo-100">
@@ -472,6 +533,18 @@ export default function ScanResultView({ equipmentId, token, onLogout }) {
         equipment={equipo}
         token={token}
         onUnassignmentSuccess={handleUnassignmentSuccess}
+      />
+
+      <BajaModal
+        isOpen={isBajaModalOpen}
+        onClose={() => setIsBajaModalOpen(false)}
+        equipment={equipo}
+        token={token}
+        currentUser={currentUser}
+        onBajaSuccess={() => {
+          setIsBajaModalOpen(false);
+          fetchEquipoYHistorial();
+        }}
       />
     </div>
   );

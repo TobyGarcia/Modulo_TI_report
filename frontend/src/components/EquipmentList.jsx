@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, FileSpreadsheet, Printer, Edit3, Trash2, QrCode, Monitor, RefreshCw, Globe, Info } from 'lucide-react';
+import { Search, Plus, FileSpreadsheet, Printer, Edit3, Trash2, QrCode, Monitor, RefreshCw, Globe, ShieldAlert, FileText, Download, UserCheck } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Pagination from './Pagination';
+import BajaModal from './BajaModal';
+import { generarFormatoBajaPDF } from '../utils/pdfGenerator';
 
 export default function EquipmentList({
   token,
+  currentUser,
   onAddClick,
   onEditClick,
   onImportClick,
@@ -15,10 +18,12 @@ export default function EquipmentList({
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [qrModalEquipo, setQrModalEquipo] = useState(null);
+  const [bajaModalEquipo, setBajaModalEquipo] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('activos'); // 'activos' | 'bajas'
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
-  // URL o IP para los códigos QR (detecta VITE_NGROK_DOMAIN de .env o localStorage u origin actual)
+  // URL o IP para los códigos QR
   const [customBaseUrl, setCustomBaseUrl] = useState(() => {
     const saved = localStorage.getItem('qr_base_url');
     if (saved) return saved;
@@ -41,11 +46,15 @@ export default function EquipmentList({
 
   const [authError, setAuthError] = useState(false);
 
-  const fetchEquipments = async (query = '') => {
+  const fetchEquipments = async (query = search, filter = statusFilter) => {
     setLoading(true);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`/api/equipos?q=${encodeURIComponent(query)}`, { headers });
+      const endpoint = filter === 'bajas'
+        ? `/api/bajas?q=${encodeURIComponent(query)}`
+        : `/api/equipos?q=${encodeURIComponent(query)}`;
+
+      const res = await fetch(endpoint, { headers });
       if (res.status === 401 || res.status === 403) {
         setAuthError(true);
         setEquipments([]);
@@ -59,7 +68,7 @@ export default function EquipmentList({
       setEquipments(Array.isArray(data) ? data : []);
       setCurrentPage(1);
     } catch (err) {
-      console.error('Error al cargar equipos:', err);
+      console.error('Error al cargar datos:', err);
       setEquipments([]);
     } finally {
       setLoading(false);
@@ -67,13 +76,19 @@ export default function EquipmentList({
   };
 
   useEffect(() => {
-    fetchEquipments();
-  }, [token]);
+    fetchEquipments(search, statusFilter);
+  }, [token, statusFilter]);
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearch(val);
-    fetchEquipments(val);
+    fetchEquipments(val, statusFilter);
+  };
+
+  const handleFilterChange = (filter) => {
+    setStatusFilter(filter);
+    setSelectedIds([]);
+    fetchEquipments(search, filter);
   };
 
   const totalPages = Math.ceil(equipments.length / pageSize) || 1;
@@ -94,14 +109,14 @@ export default function EquipmentList({
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este equipo?')) return;
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este registro permanentemente de la base de datos?')) return;
     try {
       const res = await fetch(`/api/equipos/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        fetchEquipments(search);
+        fetchEquipments(search, statusFilter);
         setSelectedIds(prev => prev.filter(itemId => itemId !== id));
       } else {
         const data = await res.json();
@@ -112,7 +127,6 @@ export default function EquipmentList({
     }
   };
 
-  // Calcular la URL Base efectiva para construir el enlace del QR
   const getEffectiveBaseUrl = () => {
     if (customBaseUrl.trim()) {
       let url = customBaseUrl.trim();
@@ -141,19 +155,19 @@ export default function EquipmentList({
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
-            <Monitor className="w-7 h-7 text-indigo-600" />
+            <Monitor className="w-7 h-7 text-[#c68a1d]" />
             <span>Inventario de Equipos & Etiquetas QR</span>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Gestión centralizada de equipos de cómputo, generación de etiquetas e importación desde PostgreSQL / Excel.
+            Gestión centralizada de equipos de cómputo, bajas de activos TI (R3PTI1) y etiquetas QR.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Campo para Ngrok / Dominio */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl">
-            <div className="flex items-center space-x-1.5 text-xs font-bold text-indigo-900">
-              <Globe className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
+            <div className="flex items-center space-x-1.5 text-xs font-bold text-black">
+              <Globe className="w-4 h-4 text-[#c68a1d] flex-shrink-0" />
               <span>URL Ngrok:</span>
             </div>
             <input
@@ -161,7 +175,7 @@ export default function EquipmentList({
               value={customBaseUrl}
               onChange={(e) => handleBaseUrlChange(e.target.value)}
               placeholder="ej. https://tu-dominio.ngrok-free.app"
-              className="bg-white border border-indigo-300 rounded px-2 py-1 text-xs font-mono font-bold text-indigo-900 outline-none w-64 focus:ring-2 focus:ring-indigo-500"
+              className="bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono font-bold text-black outline-none w-64 focus:ring-2 focus:ring-[#e6b520]"
             />
           </div>
 
@@ -175,9 +189,9 @@ export default function EquipmentList({
 
           <button
             onClick={onAddClick}
-            className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow transition"
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-[#e6b520] bg-black hover:bg-neutral-800 rounded-xl shadow transition border border-amber-900/40"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-[#e6b520]" />
             <span>Nuevo Equipo</span>
           </button>
         </div>
@@ -185,13 +199,42 @@ export default function EquipmentList({
 
       {/* Banner de Estado de Ngrok */}
       {effectiveBaseUrl && effectiveBaseUrl.includes('ngrok') && (
-        <div className="flex items-center space-x-3 bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs text-emerald-900">
-          <Globe className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+        <div className="flex items-center space-x-3 bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-black">
+          <Globe className="w-5 h-5 text-[#c68a1d] flex-shrink-0" />
           <div>
-            <span className="font-bold">Túnel Ngrok Activo:</span> Todos los códigos QR están configurados para usar el dominio seguro <span className="font-mono font-bold underline">{effectiveBaseUrl}</span>. ¡Cualquier dispositivo con Internet podrá escanearlos!
+            <span className="font-bold">Túnel Ngrok Activo:</span> Todos los códigos QR están configurados para usar el dominio seguro <span className="font-mono font-bold underline">{effectiveBaseUrl}</span>.
           </div>
         </div>
       )}
+
+      {/* Barra de Pestañas de Estado (Activos vs Historial de Bajas) */}
+      <div className="flex justify-between items-center bg-white p-2 rounded-2xl shadow-sm border text-xs font-bold">
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleFilterChange('activos')}
+            className={`px-4 py-2.5 rounded-xl transition flex items-center space-x-2 ${
+              statusFilter === 'activos'
+                ? 'bg-[#e6b520] text-black font-bold shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Monitor className="w-4 h-4 text-black" />
+            <span>Equipos Activos</span>
+          </button>
+
+          <button
+            onClick={() => handleFilterChange('bajas')}
+            className={`px-4 py-2.5 rounded-xl transition flex items-center space-x-2 ${
+              statusFilter === 'bajas'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-amber-300" />
+            <span>Equipos Dados de Baja (Historial R3PTI1)</span>
+          </button>
+        </div>
+      </div>
 
       {/* Barra de Filtros, Búsqueda y Selección Masiva */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -201,26 +244,26 @@ export default function EquipmentList({
             type="text"
             value={search}
             onChange={handleSearchChange}
-            placeholder="Buscar por Hostname, Serial, Persona, Marca, Área..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+            placeholder={statusFilter === 'bajas' ? "Buscar en bajas por Hostname, Serial, Motivo..." : "Buscar por Hostname, Serial, Persona, Marca, Área..."}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#e6b520] focus:border-black outline-none shadow-sm"
           />
         </div>
 
         <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
           <button
-            onClick={() => fetchEquipments(search)}
-            className="p-2.5 bg-white border rounded-xl hover:bg-gray-50 text-gray-600 transition"
+            onClick={() => fetchEquipments(search, statusFilter)}
+            className="p-2.5 bg-white border rounded-xl hover:bg-[#e6b520] text-gray-700 hover:text-black transition"
             title="Recargar"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4 text-[#c68a1d]" />
           </button>
 
-          {selectedIds.length > 0 && (
+          {statusFilter === 'activos' && selectedIds.length > 0 && (
             <button
               onClick={handlePrintSelected}
-              className="flex items-center space-x-2 px-4 py-2.5 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow transition"
+              className="flex items-center space-x-2 px-4 py-2.5 text-sm font-bold text-black bg-[#e6b520] hover:bg-[#d0a11b] rounded-xl shadow transition border border-[#c68a1d]"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-4 h-4 text-black" />
               <span>Imprimir {selectedIds.length} Etiquetas</span>
             </button>
           )}
@@ -232,29 +275,118 @@ export default function EquipmentList({
         {loading ? (
           <div className="p-12 text-center text-gray-500">
             <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            Cargando registros de PostgreSQL...
+            Cargando registros...
           </div>
         ) : equipments.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <Monitor className="w-12 h-12 text-gray-300 mx-auto" />
+            {statusFilter === 'bajas' ? (
+              <ShieldAlert className="w-12 h-12 text-gray-300 mx-auto text-amber-500" />
+            ) : (
+              <Monitor className="w-12 h-12 text-gray-300 mx-auto" />
+            )}
             <p className="text-gray-600 font-medium">
-              {authError ? 'Atención: Sesión de TI Expirada' : 'No se encontraron equipos registrados.'}
+              {authError
+                ? 'Atención: Sesión de TI Expirada'
+                : statusFilter === 'bajas'
+                ? 'No hay registros de bajas de equipos en el historial.'
+                : 'No se encontraron equipos activos registrados.'}
             </p>
             <p className="text-xs text-gray-400">
               {authError
                 ? 'Su token de inicio de sesión ha vencido o requiere volver a identificarse.'
+                : statusFilter === 'bajas'
+                ? 'Los equipos que desincorpore del inventario aparecerán en esta lista con su Acta R3PTI1 en PDF.'
                 : 'Prueba importando tu plantilla de Excel o añadiendo un nuevo registro.'}
             </p>
-            {authError && (
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs transition"
-              >
-                Volver a Iniciar Sesión
-              </button>
-            )}
+          </div>
+        ) : statusFilter === 'bajas' ? (
+          /* TABLA DE HISTORIAL DE BAJAS (R3PTI1) */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-gray-700">
+              <thead className="bg-red-50 text-xs font-semibold text-red-900 uppercase tracking-wider border-b border-red-200">
+                <tr>
+                  <th className="p-4">Fecha Baja / Formato</th>
+                  <th className="p-4">Hostname / Serial</th>
+                  <th className="p-4">Marca & Modelo</th>
+                  <th className="p-4">Motivo de la Baja</th>
+                  <th className="p-4">Ubicación / Área</th>
+                  <th className="p-4">Solicitó / Autorizó (TI)</th>
+                  <th className="p-4 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {currentEquipments.map((baja) => {
+                  const fechaStr = baja.fecha_baja ? String(baja.fecha_baja).split('T')[0] : 'N/A';
+
+                  return (
+                    <tr key={baja.id} className="hover:bg-red-50/40 transition bg-red-50/10">
+                      <td className="p-4">
+                        <div className="font-bold text-red-900">{fechaStr}</div>
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-200">
+                          {baja.codigo_formato || 'R3PTI1'}
+                        </span>
+                      </td>
+                      <td className="p-4 font-medium">
+                        <div className="font-mono text-gray-900 font-bold">{baja.hostname || 'N/A'}</div>
+                        <div className="text-xs font-mono text-gray-500">S/N: {baja.serial}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-gray-900 font-semibold">{baja.marca}</div>
+                        <div className="text-xs text-gray-500">{baja.modelo}</div>
+                      </td>
+                      <td className="p-4">
+                        <span className="inline-block px-2.5 py-1 text-xs font-bold text-amber-900 bg-amber-100 rounded-lg border border-amber-300">
+                          {baja.motivo}
+                        </span>
+                        {baja.observaciones && (
+                          <div className="text-xs text-gray-500 mt-1 line-clamp-1">{baja.observaciones}</div>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <div className="text-gray-900">{baja.empresa || 'ITZ OIL & GAS'}</div>
+                        <div className="text-xs text-gray-500">{baja.area || 'N/A'}</div>
+                      </td>
+                      <td className="p-4 text-xs">
+                        <div className="text-gray-800"><strong>Solicitó:</strong> {baja.solicitante_nombre || 'Soporte TI'}</div>
+                        <div className="text-gray-600"><strong>Autorizó:</strong> {baja.autoriza_nombre || 'Jefe de TI'}</div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => generarFormatoBajaPDF(baja, baja)}
+                            className="px-3 py-1.5 text-xs font-bold text-red-800 bg-red-100 hover:bg-red-200 border border-red-300 rounded-xl transition shadow-xs flex items-center space-x-1"
+                            title="Descargar Acta de Baja R3PTI1 en PDF"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Descargar PDF (R3PTI1)</span>
+                          </button>
+
+                          {baja.equipo_id && (
+                            <button
+                              onClick={() => setQrModalEquipo({ id: baja.equipo_id, hostname: baja.hostname, serial: baja.serial })}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition"
+                              title="Ver Código QR"
+                            >
+                              <QrCode className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={equipments.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
           </div>
         ) : (
+          /* TABLA DE EQUIPOS ACTIVOS */
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-gray-700">
               <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
@@ -268,7 +400,7 @@ export default function EquipmentList({
                     />
                   </th>
                   <th className="p-4">Hostname / Serial</th>
-                  <th className="p-4">Personal Asignado</th>
+                  <th className="p-4">Personal / Ubicación</th>
                   <th className="p-4">Empresa / Área</th>
                   <th className="p-4">Marca & Modelo</th>
                   <th className="p-4">Hardware (CPU / RAM / Disco)</th>
@@ -279,6 +411,7 @@ export default function EquipmentList({
               <tbody className="divide-y divide-gray-200">
                 {currentEquipments.map((eq) => {
                   const isSelected = selectedIds.includes(eq.id);
+
                   return (
                     <tr
                       key={eq.id}
@@ -315,15 +448,17 @@ export default function EquipmentList({
                         <div className="text-gray-400">{eq.ram_capacidad} RAM | {eq.disco_capacidad}</div>
                       </td>
                       <td className="p-4 space-y-1">
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded-md ${
-                          eq.estado_nombre === 'Asignado' || eq.empleado_id ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                        <span className={`inline-block px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-md ${
+                          eq.estado_nombre === 'Asignado' || eq.empleado_id
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-emerald-100 text-emerald-800'
                         }`}>
                           {eq.estado_nombre || (eq.empleado_id ? 'Asignado' : 'Resguardo')}
                         </span>
                         <div className="text-[11px] text-gray-500">{eq.estado_fisico || 'Excelente'}</div>
                       </td>
                       <td className="p-4 text-center">
-                        <div className="flex items-center justify-center space-x-2">
+                        <div className="flex items-center justify-center space-x-1.5">
                           <button
                             onClick={() => setQrModalEquipo(eq)}
                             className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition"
@@ -331,6 +466,7 @@ export default function EquipmentList({
                           >
                             <QrCode className="w-4 h-4" />
                           </button>
+
                           <button
                             onClick={() => onEditClick(eq)}
                             className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"
@@ -338,10 +474,19 @@ export default function EquipmentList({
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
+
+                          <button
+                            onClick={() => setBajaModalEquipo(eq)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-100 rounded-lg transition"
+                            title="Dar de Baja Equipo (Formato R3PTI1)"
+                          >
+                            <ShieldAlert className="w-4 h-4" />
+                          </button>
+
                           <button
                             onClick={() => handleDelete(eq.id)}
                             className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition"
-                            title="Eliminar"
+                            title="Eliminar de BD"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -401,6 +546,19 @@ export default function EquipmentList({
           </div>
         </div>
       )}
+
+      {/* Modal de Baja de Equipos (Formato R3PTI1) */}
+      <BajaModal
+        isOpen={!!bajaModalEquipo}
+        onClose={() => setBajaModalEquipo(null)}
+        equipment={bajaModalEquipo}
+        token={token}
+        currentUser={currentUser}
+        onBajaSuccess={() => {
+          setBajaModalEquipo(null);
+          fetchEquipments(search, statusFilter);
+        }}
+      />
     </div>
   );
 }

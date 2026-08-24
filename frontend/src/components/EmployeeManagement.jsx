@@ -155,7 +155,7 @@ export default function EmployeeManagement({ token }) {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
-            <Users className="w-7 h-7 text-indigo-600" />
+            <Users className="w-7 h-7 text-[#c68a1d]" />
             <span>Gestión de Personal & Empleados</span>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -165,9 +165,9 @@ export default function EmployeeManagement({ token }) {
 
         <button
           onClick={handleOpenAddModal}
-          className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow transition"
+          className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-[#e6b520] bg-black hover:bg-neutral-800 rounded-xl shadow transition border border-amber-900/40"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 text-[#e6b520]" />
           <span>Nuevo Personal de Ingreso</span>
         </button>
       </div>
