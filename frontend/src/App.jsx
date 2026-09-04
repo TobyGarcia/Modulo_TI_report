@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TopBar from './components/TopBar';
+import Sidebar from './components/Sidebar';
 import LoginPage from './components/LoginPage';
 import EquipmentList from './components/EquipmentList';
 import EquipmentFormModal from './components/EquipmentFormModal';
@@ -12,6 +12,8 @@ import EmployeeManagement from './components/EmployeeManagement';
 import SalidasView from './components/SalidasView';
 import M365View from './components/M365View';
 import CatalogosView from './components/CatalogosView';
+import DashboardView from './components/DashboardView';
+import InsumosView from './components/InsumosView';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -69,7 +71,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'empleados' | 'bitacora' | 'users'
+  const [activeTab, setActiveTab] = useState('inicio'); // 'inicio' | 'inventory' | 'catalogos' | 'empleados' | 'bitacora' | 'salidas' | 'm365' | 'users'
   const [currentView, setCurrentView] = useState('main'); // 'main' | 'print' | 'scan'
   const [scanId, setScanId] = useState(null);
   const [selectedEquipmentsToPrint, setSelectedEquipmentsToPrint] = useState([]);
@@ -177,8 +179,8 @@ export default function App() {
   // 3. Vista de Impresión de Etiquetas
   if (currentView === 'print') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <TopBar
+      <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+        <Sidebar
           activeTab={activeTab}
           setActiveTab={(tab) => {
             setActiveTab(tab);
@@ -187,27 +189,32 @@ export default function App() {
           user={user}
           onLogout={handleLogout}
         />
-        <LabelPrintView
-          selectedEquipments={selectedEquipmentsToPrint}
-          networkIp={networkIp}
-          onBack={() => setCurrentView('main')}
-        />
+        <div className="flex-1 lg:pl-64 transition-all">
+          <LabelPrintView
+            selectedEquipments={selectedEquipmentsToPrint}
+            networkIp={networkIp}
+            onBack={() => setCurrentView('main')}
+          />
+        </div>
       </div>
     );
   }
 
   // 4. Panel de Administración Principal (Pestañas de Inventario / Personal / Bitácora / Usuarios)
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <TopBar
+    <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row">
+      <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         user={user}
         onLogout={handleLogout}
       />
 
-      <main>
+      <main className="flex-1 lg:pl-64 transition-all min-w-0">
         <ErrorBoundary>
+          {activeTab === 'inicio' && (
+            <DashboardView token={token} onNavigateTab={(tab) => setActiveTab(tab)} />
+          )}
           {activeTab === 'inventory' && (
             <EquipmentList
               token={token}
@@ -217,6 +224,9 @@ export default function App() {
               onImportClick={() => setIsImportModalOpen(true)}
               onPrintLabelsClick={handleOpenPrintView}
             />
+          )}
+          {activeTab === 'insumos' && (
+            <InsumosView user={user} />
           )}
           {activeTab === 'catalogos' && (
             <CatalogosView token={token} />

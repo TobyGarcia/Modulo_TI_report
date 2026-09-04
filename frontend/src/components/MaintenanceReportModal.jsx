@@ -2,6 +2,40 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FileCheck, X, Check, Laptop, Camera, Trash2, ShieldCheck, Search, Upload } from 'lucide-react';
 import SignatureCanvas from './SignatureCanvas';
 
+// Presets predefinidos de Tipo de Trabajo y Material Utilizado según especificación SGI
+const WORK_TYPES_PRESETS = [
+  {
+    id: 'general',
+    label: 'Mantenimiento General (mantenimiento normal)',
+    acciones: '- Limpieza general de motherboard\n- Limpieza general de ventiladores y salida de aire\n- Cambio de pasta térmica\n- Limpieza de plástico\n- Limpieza de pantalla',
+    materiales: 'Alcohol Isopropílico, Pasta térmica regular, Toallitas húmedas para electrónicos, Espuma limpiadora, Hisopos, Líquido limpiador de pantallas'
+  },
+  {
+    id: 'especializado',
+    label: 'Mantenimiento especializado (para ciertos equipos)',
+    acciones: '- Limpieza general de motherboard\n- Limpieza general de ventiladores y salida de aire\n- Cambio de pasta térmica\n- Cambio de termal Pads',
+    materiales: 'Alcohol isopropílico, Pasta térmica especializada, Termal Pads, Toallitas húmedas, Hisopos, Líquido limpiador de pantalla'
+  },
+  {
+    id: 'cambio_pieza',
+    label: 'Cambio de pieza',
+    acciones: '- Limpieza general\n- Limpieza de terminal\n- Cambio de pieza (especificar la pieza cambiada): ',
+    materiales: 'Alcohol isopropílico, Hisopos, Toallitas húmedas'
+  },
+  {
+    id: 'expansion',
+    label: 'Expansión de componentes',
+    acciones: '- Limpieza general\n- Limpieza de terminal\n- Colocación de componente (especificar la pieza): ',
+    materiales: 'Alcohol isopropílico, Hisopos, Toallitas húmedas'
+  },
+  {
+    id: 'otros',
+    label: 'Otros (Especificar manualmente)',
+    acciones: '',
+    materiales: ''
+  }
+];
+
 // Helper seguro para guardar borradores en localStorage omitiendo datos pesados Base64
 const saveLightDraft = (key, data) => {
   if (!key) return;
@@ -51,6 +85,7 @@ export default function MaintenanceReportModal({
     observaciones_equipo: '',
     trabajo_realizado: '',
     material_utilizado: '',
+    insumos_usados: [],
     imagenes_evidencia: [],
     firma_responsable: null,
     firma_tecnico: null,
@@ -58,10 +93,23 @@ export default function MaintenanceReportModal({
   });
 
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [catalogInsumos, setCatalogInsumos] = useState([]);
+  const [catalogRecetas, setCatalogRecetas] = useState([]);
 
   // Inicialización ÚNICA al abrir el modal o cambiar el equipo base/mantenimiento
   useEffect(() => {
     if (!isOpen) return;
+
+    const token = localStorage.getItem('token');
+    fetch('/api/insumos', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => Array.isArray(data) && setCatalogInsumos(data))
+      .catch(err => console.error('Error al cargar catálogo de insumos:', err));
+
+    fetch('/api/insumos/recetas/list', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => Array.isArray(data) && setCatalogRecetas(data))
+      .catch(err => console.error('Error al cargar catálogo de recetas:', err));
 
     const activeEq = equipment || (equiposList.length > 0 ? equiposList[0] : null);
     setSelectedEq(activeEq);
@@ -513,19 +561,159 @@ export default function MaintenanceReportModal({
             </div>
           </div>
 
-          {/* Trabajo Realizado y Repuestos */}
-          <div className="space-y-3">
+          {/* Trabajo Realizado y Repuestos con Plantillas Predefinidas SGI */}
+          <div className="space-y-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
+            <div>
+              <label className="block text-xs font-bold text-indigo-900 mb-1">
+                Seleccionar Plantilla / Tipo de Trabajo SGI
+              </label>
+              <select
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  const preset = WORK_TYPES_PRESETS.find(p => p.id === selectedId);
+                  if (preset && preset.id !== 'otros') {
+                    updateFormField('trabajo_realizado', preset.acciones);
+                    updateFormField('material_utilizado', preset.materiales);
+                  }
+                }}
+                className="w-full text-xs p-2.5 rounded-xl border border-indigo-300 font-bold bg-white text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="">-- Seleccionar Tipo de Trabajo (Auto-llenar Acciones y Material) --</option>
+                {WORK_TYPES_PRESETS.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Cargar Receta de Mantenimiento & Descuento de Almacén */}
+            {catalogRecetas.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-amber-900 mb-1">
+                  📦 Cargar Receta de Insumos de Almacén:
+                </label>
+                <select
+                  onChange={(e) => {
+                    const recetaId = e.target.value;
+                    if (!recetaId) return;
+                    const receta = catalogRecetas.find(r => r.id === parseInt(recetaId, 10));
+                    if (receta && receta.insumos) {
+                      const insumosFormatted = receta.insumos.map(item => ({
+                        insumo_id: item.insumo_id,
+                        cantidad: item.cantidad
+                      }));
+                      updateFormField('insumos_usados', insumosFormatted);
+                      const textoMateriales = receta.insumos
+                        .map(i => `${i.insumo_nombre} (${i.cantidad} ${i.unidad_medida})`)
+                        .join(', ');
+                      updateFormField('material_utilizado', textoMateriales);
+                    }
+                  }}
+                  className="w-full text-xs p-2.5 rounded-xl border border-amber-300 font-bold bg-amber-50/60 text-amber-950 focus:ring-2 focus:ring-amber-500 outline-none"
+                >
+                  <option value="">-- Cargar Receta Predefinida de Insumos --</option>
+                  {catalogRecetas.map(rec => (
+                    <option key={rec.id} value={rec.id}>
+                      {rec.nombre} ({rec.tipo_mantenimiento}) - {rec.insumos?.length || 0} insumos
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Captura Detallada de Insumos Consumidos */}
+            <div className="space-y-2 border-t border-indigo-200 pt-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono">
+                  Consumo de Insumos para Descuento de Stock:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (catalogInsumos.length === 0) return;
+                    const firstId = catalogInsumos[0].id;
+                    const current = formData.insumos_usados || [];
+                    updateFormField('insumos_usados', [...current, { insumo_id: firstId, cantidad: 1 }]);
+                  }}
+                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-black font-bold text-[11px] rounded-lg transition shadow"
+                >
+                  + Agregar Insumo
+                </button>
+              </div>
+
+              {(formData.insumos_usados || []).length === 0 ? (
+                <p className="text-[11px] text-gray-500 italic bg-white p-2 rounded-lg border border-gray-200">
+                  Sin insumos del catálogo asociados. Puedes seleccionar una receta arriba o hacer clic en "+ Agregar Insumo".
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {(formData.insumos_usados || []).map((item, idx) => {
+                    const insumoObj = catalogInsumos.find(i => i.id === parseInt(item.insumo_id, 10));
+                    return (
+                      <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-200">
+                        <select
+                          value={item.insumo_id}
+                          onChange={(e) => {
+                            const newInsumos = [...(formData.insumos_usados || [])];
+                            newInsumos[idx].insumo_id = parseInt(e.target.value, 10);
+                            updateFormField('insumos_usados', newInsumos);
+                          }}
+                          className="flex-1 text-xs p-1.5 rounded-lg border border-gray-300 font-medium"
+                        >
+                          {catalogInsumos.map(ins => (
+                            <option key={ins.id} value={ins.id}>
+                              {ins.nombre} ({ins.codigo}) - Stock: {parseFloat(ins.stock_actual)} {ins.unidad_medida}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="w-28 flex items-center space-x-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={item.cantidad}
+                            onChange={(e) => {
+                              const newInsumos = [...(formData.insumos_usados || [])];
+                              newInsumos[idx].cantidad = parseFloat(e.target.value) || 0;
+                              updateFormField('insumos_usados', newInsumos);
+                            }}
+                            className="w-full text-xs p-1.5 rounded-lg border border-gray-300 font-mono font-bold text-center"
+                          />
+                          <span className="text-[10px] text-gray-600 font-mono">
+                            {insumoObj?.unidad_medida || 'Pza'}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newInsumos = (formData.insumos_usados || []).filter((_, iIdx) => iIdx !== idx);
+                            updateFormField('insumos_usados', newInsumos);
+                          }}
+                          className="p-1 text-red-500 hover:text-red-700 font-bold"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Trabajo Realizado <span className="text-red-500">*</span>
+                Acciones / Trabajo Realizado <span className="text-red-500">*</span>
               </label>
               <textarea
-                rows="3"
+                rows="4"
                 required
                 value={formData.trabajo_realizado}
                 onChange={(e) => updateFormField('trabajo_realizado', e.target.value)}
                 placeholder="Detalle las acciones realizadas: limpieza física, depuración de sistema, cambio de piezas, formateo, etc."
-                className="w-full text-xs p-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-xs p-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 font-mono"
               />
             </div>
 
@@ -535,8 +723,8 @@ export default function MaintenanceReportModal({
                 type="text"
                 value={formData.material_utilizado}
                 onChange={(e) => updateFormField('material_utilizado', e.target.value)}
-                placeholder="Ej: Aire comprimido, alcohol isopropílico, SSD 500GB, pasta térmica..."
-                className="w-full text-xs p-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: Alcohol Isopropílico, Pasta térmica, toallitas húmedas, hisopos..."
+                className="w-full text-xs p-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 font-mono"
               />
             </div>
 

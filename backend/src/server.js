@@ -13,6 +13,8 @@ const salidasRoutes = require('./routes/salidas.routes');
 const m365Routes = require('./routes/m365.routes');
 const bajasRoutes = require('./routes/bajas.routes');
 const catalogosRoutes = require('./routes/catalogos.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
+const insumosRoutes = require('./routes/insumos.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +35,8 @@ app.use('/api/salidas', salidasRoutes);
 app.use('/api/m365', m365Routes);
 app.use('/api/bajas', bajasRoutes);
 app.use('/api/catalogos', catalogosRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/insumos', insumosRoutes);
 
 // Ruta de comprobación de salud del servidor
 app.get('/health', (req, res) => {
@@ -139,6 +143,7 @@ async function initDatabase() {
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL;
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS estado_id INT REFERENCES estados_equipo(id) DEFAULT 1;
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS tipo_equipo_id INT REFERENCES tipos_equipo(id) DEFAULT 1;
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS especificaciones_extra JSONB DEFAULT '{}';
       UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id IS NULL;
     `);
 
@@ -314,6 +319,59 @@ async function initDatabase() {
         fecha_baja TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 6.4. Crear tablas de insumos y recetas si no existen
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS insumos (
+        id SERIAL PRIMARY KEY,
+        codigo VARCHAR(50) UNIQUE NOT NULL,
+        nombre VARCHAR(150) NOT NULL,
+        descripcion TEXT,
+        categoria VARCHAR(100) DEFAULT 'General',
+        unidad_medida VARCHAR(50) DEFAULT 'Pza',
+        presentacion NUMERIC(10,2) DEFAULT 1.00,
+        stock_actual NUMERIC(10,2) DEFAULT 0.00,
+        stock_minimo NUMERIC(10,2) DEFAULT 1.00,
+        estado VARCHAR(20) DEFAULT 'activo',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS recetas_mantenimiento (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        tipo_mantenimiento VARCHAR(50) NOT NULL,
+        descripcion TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS receta_insumos (
+        id SERIAL PRIMARY KEY,
+        receta_id INT REFERENCES recetas_mantenimiento(id) ON DELETE CASCADE,
+        insumo_id INT REFERENCES insumos(id) ON DELETE CASCADE,
+        cantidad NUMERIC(10,2) NOT NULL DEFAULT 1.00
+      );
+
+      CREATE TABLE IF NOT EXISTS mantenimiento_insumos (
+        id SERIAL PRIMARY KEY,
+        mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE CASCADE,
+        insumo_id INT REFERENCES insumos(id) ON DELETE RESTRICT,
+        cantidad NUMERIC(10,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS movimientos_insumos (
+        id SERIAL PRIMARY KEY,
+        insumo_id INT REFERENCES insumos(id) ON DELETE CASCADE,
+        tipo_movimiento VARCHAR(30) NOT NULL,
+        cantidad NUMERIC(10,2) NOT NULL,
+        mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE SET NULL,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        motivo TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 

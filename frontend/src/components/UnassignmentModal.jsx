@@ -114,26 +114,28 @@ export default function UnassignmentModal({ isOpen, onClose, equipment, token, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden my-8 border">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-fade-in">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden my-auto border border-gray-100 max-h-[92vh] flex flex-col">
         {/* Encabezado */}
-        <div className="bg-gradient-to-r from-amber-600 to-red-600 p-5 text-white flex justify-between items-center">
+        <div className="bg-gradient-to-r from-amber-600 to-red-600 p-4 text-white flex justify-between items-center shrink-0">
           <div className="flex items-center space-x-2">
             <LogOut className="w-6 h-6 text-amber-200" />
             <div>
-              <h2 className="font-bold text-lg leading-tight">Desasignación / Reasignación</h2>
+              <h2 className="font-bold text-base leading-tight">Desasignación / Reasignación</h2>
               <p className="text-xs text-amber-100 font-mono">{equipment.hostname} ({equipment.serial})</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-amber-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+            className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/20 transition flex items-center justify-center"
+            title="Cerrar ventana (X)"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6 font-bold" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto">
           {error && (
             <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 font-semibold">
               {error}

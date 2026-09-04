@@ -200,6 +200,61 @@ CREATE TABLE IF NOT EXISTS salidas_equipos (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla de Insumos y Materiales
+CREATE TABLE IF NOT EXISTS insumos (
+    id SERIAL PRIMARY KEY,
+    codigo VARCHAR(50) UNIQUE NOT NULL,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    categoria VARCHAR(100) DEFAULT 'General',
+    unidad_medida VARCHAR(50) DEFAULT 'Pza',
+    presentacion NUMERIC(10,2) DEFAULT 1.00,
+    stock_actual NUMERIC(10,2) DEFAULT 0.00,
+    stock_minimo NUMERIC(10,2) DEFAULT 1.00,
+    estado VARCHAR(20) DEFAULT 'activo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de Recetas por Tipo de Mantenimiento (BOM)
+CREATE TABLE IF NOT EXISTS recetas_mantenimiento (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    tipo_mantenimiento VARCHAR(50) NOT NULL,
+    descripcion TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Relación de Insumos por Receta
+CREATE TABLE IF NOT EXISTS receta_insumos (
+    id SERIAL PRIMARY KEY,
+    receta_id INT REFERENCES recetas_mantenimiento(id) ON DELETE CASCADE,
+    insumo_id INT REFERENCES insumos(id) ON DELETE CASCADE,
+    cantidad NUMERIC(10,2) NOT NULL DEFAULT 1.00
+);
+
+-- Relación de Insumos Utilizados en Mantenimiento
+CREATE TABLE IF NOT EXISTS mantenimiento_insumos (
+    id SERIAL PRIMARY KEY,
+    mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE CASCADE,
+    insumo_id INT REFERENCES insumos(id) ON DELETE RESTRICT,
+    cantidad NUMERIC(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Bitácora de Movimientos de Insumos (Entradas, Salidas por Mantenimiento y Ajustes)
+CREATE TABLE IF NOT EXISTS movimientos_insumos (
+    id SERIAL PRIMARY KEY,
+    insumo_id INT REFERENCES insumos(id) ON DELETE CASCADE,
+    tipo_movimiento VARCHAR(30) NOT NULL,
+    cantidad NUMERIC(10,2) NOT NULL,
+    mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE SET NULL,
+    usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+    motivo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Comentarios explicativos
 COMMENT ON TABLE empleados IS 'Tabla de empleados / personal para asignación de equipos';
 COMMENT ON TABLE estados_equipo IS 'Catálogo de estados de asignación de equipos';
@@ -208,4 +263,9 @@ COMMENT ON TABLE usuarios IS 'Tabla de usuarios autenticados del sistema';
 COMMENT ON TABLE mantenimientos IS 'Tabla de programación, reportes individuales y bitácora de mantenimiento SGI';
 COMMENT ON TABLE asignaciones IS 'Tabla principal de asignaciones, desasignaciones y reasignaciones de equipos';
 COMMENT ON TABLE salidas_equipos IS 'Tabla de solicitudes y pases de salida de equipo informático (Formato SGI R1PTI3)';
+COMMENT ON TABLE insumos IS 'Catálogo de materiales e insumos de mantenimiento con unidad de medida y presentación';
+COMMENT ON TABLE recetas_mantenimiento IS 'Plantillas/Recetas de materiales requeridos según el tipo de mantenimiento';
+COMMENT ON TABLE mantenimiento_insumos IS 'Detalle de consumo de insumos por mantenimiento realizado';
+COMMENT ON TABLE movimientos_insumos IS 'Historial de entradas (reabastecimiento) y salidas de stock';
+
 

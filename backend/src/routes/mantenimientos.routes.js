@@ -127,7 +127,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mantenimiento no encontrado' });
     }
-    res.json(result.rows[0]);
+
+    const mantenimiento = result.rows[0];
+
+    // Obtener insumos consumidos en este mantenimiento
+    const insumosRes = await pool.query(`
+      SELECT 
+        mi.id,
+        mi.insumo_id,
+        mi.cantidad,
+        i.codigo as insumo_codigo,
+        i.nombre as insumo_nombre,
+        i.unidad_medida,
+        i.presentacion
+      FROM mantenimiento_insumos mi
+      JOIN insumos i ON mi.insumo_id = i.id
+      WHERE mi.mantenimiento_id = $1
+    `, [mantenimiento.id]);
+
+    mantenimiento.insumos_usados = insumosRes.rows;
+    res.json(mantenimiento);
   } catch (err) {
     console.error('Error al obtener mantenimiento:', err);
     res.status(500).json({ error: 'Error al consultar mantenimiento' });
@@ -303,6 +322,46 @@ router.post('/reporte', authenticateToken, async (req, res) => {
 
       const result = await pool.query(insertQuery, values);
       reportRecord = result.rows[0];
+    }
+
+    // --- Procesar insumos_usados y descontar inventario ---
+    const { insumos_usados } = req.body;
+    if (Array.isArray(insumos_usados) && insumos_usados.length > 0) {
+      for (const item of insumos_usados) {
+        const insumoId = parseInt(item.insumo_id, 10);
+        const cant = parseFloat(item.cantidad);
+        if (insumoId && !isNaN(cant) && cant > 0) {
+          try {
+            // Guardar el registro de insumo consumido
+            await pool.query(`
+              INSERT INTO mantenimiento_insumos (mantenimiento_id, insumo_id, cantidad)
+              VALUES ($1, $2, $3)
+            `, [reportRecord.id, insumoId, cant]);
+
+            // Descontar de la existencia en insumos
+            await pool.query(`
+              UPDATE insumos
+              SET stock_actual = GREATEST(0, stock_actual - $1),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $2
+            `, [cant, insumoId]);
+
+            // Registrar movimiento de inventario
+            await pool.query(`
+              INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
+              VALUES ($1, 'salida_mantenimiento', $2, $3, $4, $5)
+            `, [
+              insumoId,
+              cant,
+              reportRecord.id,
+              req.user ? req.user.id : null,
+              `Consumo en Mantenimiento #${reportRecord.id} (${tipo_mantenimiento})`
+            ]);
+          } catch (eInsumo) {
+            console.error('Error al descontar insumo ' + insumoId + ':', eInsumo);
+          }
+        }
+      }
     }
 
     // Garantizar que cualquier cita/mantenimiento programado previo de este equipo cambie a 'completado'

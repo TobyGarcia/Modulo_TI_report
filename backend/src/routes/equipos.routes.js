@@ -153,7 +153,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -181,20 +181,21 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
+    const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
 
     const query = `
       INSERT INTO equipos (
         item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING *;
     `;
 
     const values = [
       item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, jsonExtra
     ];
 
     const result = await pool.query(query, values);
@@ -316,7 +317,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -336,21 +337,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
+    const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
 
     const query = `
       UPDATE equipos SET
         item = $1, personal_asignado = $2, empleado_id = $3, estado_id = $4, tipo_equipo_id = $5, empresa = $6, ciudad = $7, area = $8, hostname = $9,
         marca = $10, modelo = $11, serial = $12, so = $13, cpu = $14, ram_capacidad = $15, disco_capacidad = $16,
         gpu_tipo = $17, gpu_modelo = $18, estado_fisico = $19, mac_wifi = $20, uso_recomendado = $21, observaciones = $22,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $23
+        especificaciones_extra = $23, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $24
       RETURNING *;
     `;
 
     const values = [
       item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, jsonExtra,
       id
     ];
 

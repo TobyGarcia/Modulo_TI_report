@@ -210,21 +210,6 @@ export default function EquipmentList({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Campo para Ngrok / Dominio */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
-            <div className="flex items-center space-x-1.5 text-xs font-bold text-black">
-              <Globe className="w-4 h-4 text-[#c68a1d] flex-shrink-0" />
-              <span>URL Ngrok:</span>
-            </div>
-            <input
-              type="text"
-              value={customBaseUrl}
-              onChange={(e) => handleBaseUrlChange(e.target.value)}
-              placeholder="ej. https://tu-dominio.ngrok-free.app"
-              className="bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono font-bold text-black outline-none w-64 focus:ring-2 focus:ring-[#e6b520]"
-            />
-          </div>
-
           <button
             onClick={onImportClick}
             className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition shadow-sm"
@@ -242,16 +227,6 @@ export default function EquipmentList({
           </button>
         </div>
       </div>
-
-      {/* Banner de Estado de Ngrok */}
-      {effectiveBaseUrl && effectiveBaseUrl.includes('ngrok') && (
-        <div className="flex items-center space-x-3 bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-black">
-          <Globe className="w-5 h-5 text-[#c68a1d] flex-shrink-0" />
-          <div>
-            <span className="font-bold">Túnel Ngrok Activo:</span> Todos los códigos QR están configurados para usar el dominio seguro <span className="font-mono font-bold underline">{effectiveBaseUrl}</span>.
-          </div>
-        </div>
-      )}
 
       {/* Barra de Pestañas de Estado (Activos vs Historial de Bajas) */}
       <div className="flex justify-between items-center bg-white p-2 rounded-2xl shadow-sm border text-xs font-bold">
