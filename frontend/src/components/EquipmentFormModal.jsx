@@ -603,6 +603,12 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                     placeholder="Ej. 2 TB (Si es NVR) / N/A"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tipo de accesorio</label>
+                  <select name="tipo_periferico" value={extraSpecs.tipo_periferico || 'Cámara'} onChange={handleExtraChange} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option value="Cámara">Cámara</option><option value="Teclado">Teclado</option><option value="Mouse">Mouse</option><option value="Docking Station">Docking Station</option><option value="NVR">NVR</option><option value="Otro">Otro</option>
+                  </select>
+                </div>
               </div>
             )}
 

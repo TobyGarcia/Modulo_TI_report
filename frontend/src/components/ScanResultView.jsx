@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Laptop, Cpu, HardDrive, Cpu as GpuIcon, User, Building2, MapPin,
   CheckCircle, Wifi, FileText, AlertTriangle, LogOut, Calendar, Plus, History, Download, Wrench,
-  UserCheck, UserPlus, ArrowRightLeft, ShieldCheck, ShieldAlert
+  UserCheck, UserPlus, ArrowRightLeft, ShieldCheck, ShieldAlert, Monitor, Printer, Camera, Router, Smartphone, BatteryCharging, Server
 } from 'lucide-react';
 import ScheduleMaintenanceModal from './ScheduleMaintenanceModal';
 import MaintenanceReportModal from './MaintenanceReportModal';
@@ -183,6 +183,23 @@ export default function ScanResultView({ equipmentId, token, onLogout, currentUs
 
   const isBaja = equipo.estado_id === 4 || equipo.estado_nombre === 'Baja';
   const isAssigned = !!(equipo.empleado_id || (equipo.personal_asignado && equipo.personal_asignado.trim() && equipo.personal_asignado !== 'No asignado'));
+  let extraSpecs = equipo.especificaciones_extra || {};
+  if (typeof extraSpecs === 'string') {
+    try { extraSpecs = JSON.parse(extraSpecs); } catch (e) { extraSpecs = {}; }
+  }
+  const tipoId = Number(equipo.tipo_equipo_id || 1);
+  const profiles = {
+    1: { label: 'Equipo de Cómputo', icon: Laptop, specs: [['Procesador', equipo.cpu, Cpu], ['Memoria RAM', equipo.ram_capacidad, Cpu], ['Almacenamiento', equipo.disco_capacidad, HardDrive], ['Gráficos', equipo.gpu_modelo || equipo.gpu_tipo, GpuIcon]] },
+    2: { label: 'Impresora / Multifuncional', icon: Printer, specs: [['Tipo de impresión', extraSpecs.tipo_impresora, Printer], ['Conexión / MAC', equipo.mac_wifi, Wifi], ['Estado físico', equipo.estado_fisico, CheckCircle], ['Uso recomendado', equipo.uso_recomendado, FileText]] },
+    3: { label: 'Monitor / Pantalla', icon: Monitor, specs: [['Tamaño de pantalla', extraSpecs.tamano_pantalla, Monitor], ['Soporte / anclaje', extraSpecs.anclaje, Monitor], ['Estado físico', equipo.estado_fisico, CheckCircle], ['Uso recomendado', equipo.uso_recomendado, FileText]] },
+    4: { label: 'Redes y Comunicaciones', icon: Router, specs: [['Tipo de dispositivo', extraSpecs.tipo_redes, Router], ['MAC / Red', equipo.mac_wifi, Wifi], ['Sistema / firmware', equipo.so, Cpu], ['Estado físico', equipo.estado_fisico, CheckCircle]] },
+    5: { label: 'Periférico / Accesorio', icon: Camera, specs: [['Tipo de accesorio', extraSpecs.tipo_periferico, Camera], ['Almacenamiento', equipo.disco_capacidad, HardDrive], ['Estado físico', equipo.estado_fisico, CheckCircle], ['Uso recomendado', equipo.uso_recomendado, FileText]] },
+    6: { label: 'Servidor / Almacenamiento', icon: Server, specs: [['Procesador', equipo.cpu, Cpu], ['Memoria RAM', equipo.ram_capacidad, Cpu], ['Almacenamiento', equipo.disco_capacidad, HardDrive], ['Sistema operativo', equipo.so, Server]] },
+    7: { label: 'Movilidad / Smartphone / Tablet', icon: Smartphone, specs: [['Sistema operativo', equipo.so, Smartphone], ['Memoria RAM', equipo.ram_capacidad, Cpu], ['Almacenamiento', equipo.disco_capacidad, HardDrive], ['IMEI', extraSpecs.imei1 || extraSpecs.imei2, Smartphone]] },
+    8: { label: 'No Break / UPS', icon: BatteryCharging, specs: [['Capacidad', extraSpecs.capacidad_watts, BatteryCharging], ['Tipo de UPS', extraSpecs.tipo_ups, BatteryCharging], ['Estado físico', equipo.estado_fisico, CheckCircle], ['Uso recomendado', equipo.uso_recomendado, FileText]] }
+  };
+  const equipmentProfile = profiles[tipoId] || profiles[1];
+  const EquipmentIcon = equipmentProfile.icon;
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 max-w-lg mx-auto space-y-4">
@@ -259,8 +276,9 @@ export default function ScanResultView({ equipmentId, token, onLogout, currentUs
         <div className={`p-6 text-white text-center relative ${
           isBaja ? 'bg-gradient-to-r from-red-800 to-amber-900' : 'bg-gradient-to-r from-indigo-700 to-purple-700'
         }`}>
-          <Laptop className="w-12 h-12 mx-auto mb-2 opacity-90" />
-          <h1 className="text-2xl font-bold font-mono tracking-tight">{equipo.hostname || 'SIN HOSTNAME'}</h1>
+          <EquipmentIcon className="w-12 h-12 mx-auto mb-2 opacity-90" />
+          <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-[0.18em]">{equipmentProfile.label}</p>
+          <h1 className="text-2xl font-bold font-mono tracking-tight">{equipo.hostname || equipmentProfile.label}</h1>
           <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mt-1">
             Serial: {equipo.serial}
           </p>
@@ -394,56 +412,34 @@ export default function ScanResultView({ equipmentId, token, onLogout, currentUs
               </div>
             </div>
 
-            {/* Especificaciones Hardware */}
+            {/* Especificaciones dinámicas de acuerdo con la categoría */}
             <div>
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Especificaciones Técnicas</h3>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Características de {equipmentProfile.label}</h3>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-gray-50 p-3 rounded-xl border">
-                  <div className="flex items-center space-x-1.5 text-gray-500 text-xs mb-1">
-                    <Cpu className="w-4 h-4 text-indigo-600" />
-                    <span>Procesador</span>
+                {equipmentProfile.specs.map(([label, value, Icon]) => (
+                  <div key={label} className="bg-gray-50 p-3 rounded-xl border">
+                    <div className="flex items-center space-x-1.5 text-gray-500 text-xs mb-1">
+                      <Icon className="w-4 h-4 text-indigo-600" />
+                      <span>{label}</span>
+                    </div>
+                    <p className="font-semibold text-gray-800 text-xs break-words">{value || 'No registrado'}</p>
                   </div>
-                  <p className="font-semibold text-gray-800 text-xs">{equipo.cpu || 'N/A'}</p>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-xl border">
-                  <div className="flex items-center space-x-1.5 text-gray-500 text-xs mb-1">
-                    <Cpu className="w-4 h-4 text-purple-600" />
-                    <span>Memoria RAM</span>
-                  </div>
-                  <p className="font-semibold text-gray-800 text-xs">{equipo.ram_capacidad || 'N/A'}</p>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-xl border">
-                  <div className="flex items-center space-x-1.5 text-gray-500 text-xs mb-1">
-                    <HardDrive className="w-4 h-4 text-blue-600" />
-                    <span>Almacenamiento</span>
-                  </div>
-                  <p className="font-semibold text-gray-800 text-xs">{equipo.disco_capacidad || 'N/A'}</p>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-xl border">
-                  <div className="flex items-center space-x-1.5 text-gray-500 text-xs mb-1">
-                    <GpuIcon className="w-4 h-4 text-emerald-600" />
-                    <span>Gráficos ({equipo.gpu_tipo})</span>
-                  </div>
-                  <p className="font-semibold text-gray-800 text-xs">{equipo.gpu_modelo || 'Integrada'}</p>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Sistema Operativo & Red */}
+            {/* Identificación complementaria */}
             <div className="space-y-2 border-t pt-4 text-xs text-gray-700">
               <div className="flex justify-between items-center py-1">
-                <span className="text-gray-500">Sistema Operativo:</span>
-                <span className="font-semibold">{equipo.so || 'N/A'}</span>
+                <span className="text-gray-500">Marca / modelo:</span>
+                <span className="font-semibold text-right">{equipo.marca || 'N/A'} {equipo.modelo || ''}</span>
               </div>
               <div className="flex justify-between items-center py-1">
                 <span className="text-gray-500 flex items-center space-x-1">
                   <Wifi className="w-3.5 h-3.5 text-gray-400" />
-                  <span>MAC Wi-Fi:</span>
+                  <span>Serial:</span>
                 </span>
-                <span className="font-mono font-semibold">{equipo.mac_wifi || 'N/A'}</span>
+                <span className="font-mono font-semibold">{equipo.serial || 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center py-1">
                 <span className="text-gray-500 flex items-center space-x-1">
