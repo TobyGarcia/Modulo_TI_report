@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check, Mail } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check, Mail, Upload } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function EmployeeManagement({ token }) {
@@ -24,6 +24,7 @@ export default function EmployeeManagement({ token }) {
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const csvInputRef = useRef(null);
 
   const fetchEmployees = async (query = '') => {
     setLoading(true);
@@ -140,6 +141,28 @@ export default function EmployeeManagement({ token }) {
     }
   };
 
+  const handleImportCsv = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setError('Selecciona un archivo CSV.');
+      return;
+    }
+    const data = new FormData();
+    data.append('file', file);
+    setError(null);
+    try {
+      const res = await fetch('/api/empleados/import-csv', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: data });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'No fue posible importar el CSV');
+      alert(`Importación completada: ${result.creados} creados y ${result.actualizados} actualizados.`);
+      fetchEmployees(search);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleViewEmployeeDetail = async (id) => {
     try {
       const res = await fetch(`/api/empleados/${id}`, {
@@ -168,13 +191,19 @@ export default function EmployeeManagement({ token }) {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-[#e6b520] bg-black hover:bg-neutral-800 rounded-xl shadow transition border border-amber-900/40"
-        >
-          <Plus className="w-4 h-4 text-[#e6b520]" />
-          <span>Nuevo Personal de Ingreso</span>
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={handleImportCsv} className="hidden" />
+          <button onClick={() => csvInputRef.current?.click()} className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition" title="Importar personal con correo desde CSV">
+            <Upload className="w-4 h-4" /><span>Importar CSV</span>
+          </button>
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-[#e6b520] bg-black hover:bg-neutral-800 rounded-xl shadow transition border border-amber-900/40"
+          >
+            <Plus className="w-4 h-4 text-[#e6b520]" />
+            <span>Nuevo Personal de Ingreso</span>
+          </button>
+        </div>
       </div>
 
       {/* Filtro y Búsqueda */}
@@ -326,16 +355,23 @@ export default function EmployeeManagement({ token }) {
                 />
               </div>
 
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Correo Electrónico (M365 / Corporativo)</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="Ej. cmartinez@itz.com.mx"
-                  className="w-full bg-white border rounded-xl p-2.5 font-mono text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+              {editingEmployee ? (
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Correo Electrónico (M365 / Corporativo)</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Ej. cmartinez@itz.com.mx"
+                    className="w-full bg-white border rounded-xl p-2.5 font-mono text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="mt-1 text-[10px] text-gray-500">El correo se asigna desde Cuentas M365, o se importa con un archivo CSV.</p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-indigo-800">
+                  El correo se asignará posteriormente desde <strong>Cuentas M365</strong>. Si ya cuenta con correo, impórtalo mediante CSV.
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

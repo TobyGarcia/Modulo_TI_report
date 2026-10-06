@@ -1,8 +1,14 @@
 const express = require('express');
+const multer = require('multer');
 const pool = require('../config/db');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
+const uploadCsv = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => callback(file.originalname.toLowerCase().endsWith('.csv') ? null : new Error('Sólo se permiten archivos .csv'))
+});
 
 async function getCompanyForEmployee(companyName) {
   const requestedName = (companyName || '').trim() || 'ITZ OIL & GAS';
@@ -12,6 +18,28 @@ async function getCompanyForEmployee(companyName) {
   );
   return result.rows[0]?.nombre || requestedName;
 }
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], value = '', quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"' && text[i + 1] === '"' && quoted) { value += '"'; i += 1; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === ',' && !quoted) { row.push(value.trim()); value = ''; }
+    else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && text[i + 1] === '\n') i += 1;
+      row.push(value.trim());
+      if (row.some(cell => cell)) rows.push(row);
+      row = []; value = '';
+    } else value += char;
+  }
+  row.push(value.trim());
+  if (row.some(cell => cell)) rows.push(row);
+  return rows;
+}
+
+const normalizeHeader = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
 // Listar empleados (Protegido)
 router.get('/', authenticateToken, async (req, res) => {
@@ -36,6 +64,52 @@ router.get('/', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error al obtener empleados:', err);
     res.status(500).json({ error: 'Error al consultar la lista de empleados' });
+  }
+});
+
+// Importar personal que ya cuenta con correo corporativo. El alta normal no admite correo.
+router.post('/import-csv', authenticateToken, authorizeRoles('admin'), uploadCsv.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Adjunta un archivo CSV' });
+  const rows = parseCsv(req.file.buffer.toString('utf8').replace(/^\uFEFF/, ''));
+  if (rows.length < 2) return res.status(400).json({ error: 'El CSV debe incluir encabezados y al menos un empleado' });
+  const headers = rows[0].map(normalizeHeader);
+  const column = (...names) => headers.findIndex(header => names.includes(header));
+  const nombreIndex = column('nombre', 'nombre completo');
+  const emailIndex = column('email', 'correo', 'correo electronico', 'correo corporativo');
+  if (nombreIndex < 0 || emailIndex < 0) return res.status(400).json({ error: 'El CSV requiere las columnas Nombre y Correo o Email' });
+
+  const areaIndex = column('area', 'departamento', 'area/departamento');
+  const empresaIndex = column('empresa');
+  const noEmpleadoIndex = column('no empleado', 'no. empleado', 'numero empleado');
+  const puestoIndex = column('puesto');
+  const client = await pool.connect();
+  let created = 0, updated = 0;
+  try {
+    await client.query('BEGIN');
+    for (let line = 1; line < rows.length; line += 1) {
+      const get = (index) => index >= 0 ? (rows[line][index] || '').trim() : '';
+      const nombre = get(nombreIndex);
+      const email = get(emailIndex);
+      if (!nombre && !email) continue;
+      if (!nombre || !email) throw new Error(`Fila ${line + 1}: Nombre y Correo son obligatorios`);
+      const empresa = await getCompanyForEmployee(get(empresaIndex));
+      const values = [nombre, get(areaIndex) || 'General', empresa, get(noEmpleadoIndex) || null, get(puestoIndex) || null, email];
+      const existing = await client.query('SELECT id FROM empleados WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1', [nombre]);
+      if (existing.rows.length) {
+        await client.query(`UPDATE empleados SET area = $1, empresa = $2, no_empleado = $3, puesto = $4, email = $5, estado = 'activo', updated_at = CURRENT_TIMESTAMP WHERE id = $6`, [...values.slice(1), existing.rows[0].id]);
+        updated += 1;
+      } else {
+        await client.query(`INSERT INTO empleados (nombre, area, empresa, no_empleado, puesto, email, estado) VALUES ($1, $2, $3, $4, $5, $6, 'activo')`, values);
+        created += 1;
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ message: 'Importación de personal completada', creados: created, actualizados: updated });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message || 'No fue posible importar el CSV' });
+  } finally {
+    client.release();
   }
 });
 
@@ -72,7 +146,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Crear nuevo empleado ("Nuevo Personal de Ingreso") (Protegido)
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { nombre, area, empresa, no_empleado, puesto, email } = req.body;
+    const { nombre, area, empresa, no_empleado, puesto } = req.body;
 
     if (!nombre || !nombre.trim()) {
       return res.status(400).json({ error: 'El nombre del empleado es obligatorio' });
@@ -100,7 +174,7 @@ router.post('/', authenticateToken, async (req, res) => {
       empresaNombre,
       no_empleado ? no_empleado.trim() : null,
       puesto ? puesto.trim() : null,
-      email ? email.trim() : null
+      null
     ];
 
     const result = await pool.query(query, values);
