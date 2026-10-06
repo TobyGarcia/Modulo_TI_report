@@ -1,3 +1,8 @@
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 const { Pool } = require('pg');
 
 const isProduction = process.env.NODE_ENV === 'production';
