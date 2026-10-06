@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Plus, Trash2, RefreshCw, FolderTree, Building2, MapPin, Briefcase, AlertCircle, CheckCircle2, Edit3 } from 'lucide-react';
+import { Layers, Plus, Trash2, RefreshCw, FolderTree, Building2, MapPin, Briefcase, AlertCircle, CheckCircle2, Edit3, X } from 'lucide-react';
 
 export default function CatalogosView({ token }) {
   const [catalogos, setCatalogos] = useState({
@@ -18,6 +18,9 @@ export default function CatalogosView({ token }) {
   const [newEmpresa, setNewEmpresa] = useState({ nombre: '', acronimo: '' });
   const [newBase, setNewBase] = useState('');
   const [newArea, setNewArea] = useState('');
+  const [editingCatalog, setEditingCatalog] = useState(null);
+  const [editForm, setEditForm] = useState({ nombre: '', descripcion: '', acronimo: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchCatalogos = async () => {
     setLoading(true);
@@ -123,23 +126,27 @@ export default function CatalogosView({ token }) {
     }
   };
 
-  const handleEditCatalog = async (type, item) => {
-    const labels = { 'tipos-equipo': 'la categoría', empresas: 'la empresa', bases: 'la base/ciudad', areas: 'el área' };
-    const nombre = window.prompt(`Editar nombre de ${labels[type]}:`, item.nombre);
-    if (nombre === null || !nombre.trim()) return;
-    const payload = { nombre: nombre.trim() };
+  const openEditCatalog = (type, item) => {
+    setEditForm({ nombre: item.nombre || '', descripcion: item.descripcion || '', acronimo: item.acronimo || '' });
+    setEditingCatalog({ type, id: item.id });
+  };
+
+  const handleEditCatalog = async (e) => {
+    e.preventDefault();
+    if (!editingCatalog || !editForm.nombre.trim()) return;
+    const { type, id } = editingCatalog;
+    const payload = { nombre: editForm.nombre.trim() };
     if (type === 'empresas') {
-      const acronimo = window.prompt('Acrónimo de 3 letras para los equipos:', item.acronimo || '');
-      if (acronimo === null) return;
-      if (!/^[a-zA-Z]{3}$/.test(acronimo.trim())) {
+      if (!/^[a-zA-Z]{3}$/.test(editForm.acronimo.trim())) {
         showNotification('El acrónimo debe tener exactamente 3 letras.', true);
         return;
       }
-      payload.acronimo = acronimo.trim().toUpperCase();
+      payload.acronimo = editForm.acronimo.trim().toUpperCase();
     }
-    if (type === 'tipos-equipo') payload.descripcion = item.descripcion || '';
+    if (type === 'tipos-equipo') payload.descripcion = editForm.descripcion.trim();
+    setSavingEdit(true);
     try {
-      const res = await fetch(`/api/catalogos/${type}/${item.id}`, {
+      const res = await fetch(`/api/catalogos/${type}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
@@ -147,9 +154,12 @@ export default function CatalogosView({ token }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al actualizar');
       showNotification('Registro actualizado correctamente');
+      setEditingCatalog(null);
       fetchCatalogos();
     } catch (err) {
       showNotification(err.message, true);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -503,7 +513,7 @@ export default function CatalogosView({ token }) {
                       </div>
                       {item.id !== 1 ? (
                         <div className="flex items-center gap-1">
-                        <button onClick={() => handleEditCatalog('tipos-equipo', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar categoría"><Edit3 className="w-4 h-4" /></button>
+                        <button onClick={() => openEditCatalog('tipos-equipo', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar categoría"><Edit3 className="w-4 h-4" /></button>
                         <button
                           onClick={() => handleDeleteTipo(item.id, item.nombre)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
@@ -530,7 +540,7 @@ export default function CatalogosView({ token }) {
                         <Building2 className="w-4 h-4 text-indigo-600" />
                         <div><span className="font-semibold text-gray-900 text-sm">{item.nombre}</span><p className="text-[10px] text-gray-500 font-mono">Equipos: {item.acronimo || 'Sin acrónimo'}</p></div>
                       </div>
-                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('empresas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar empresa"><Edit3 className="w-4 h-4" /></button><button
+                      <div className="flex items-center gap-1"><button onClick={() => openEditCatalog('empresas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar empresa"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteEmpresa(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar empresa"
@@ -552,7 +562,7 @@ export default function CatalogosView({ token }) {
                         <MapPin className="w-4 h-4 text-emerald-600" />
                         <span className="font-semibold text-gray-900 text-sm">{item.nombre}</span>
                       </div>
-                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('bases', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar base/ciudad"><Edit3 className="w-4 h-4" /></button><button
+                      <div className="flex items-center gap-1"><button onClick={() => openEditCatalog('bases', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar base/ciudad"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteBase(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar base/ciudad"
@@ -574,7 +584,7 @@ export default function CatalogosView({ token }) {
                         <Briefcase className="w-4 h-4 text-purple-600" />
                         <span className="font-semibold text-gray-900 text-sm">{item.nombre}</span>
                       </div>
-                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('areas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar área"><Edit3 className="w-4 h-4" /></button><button
+                      <div className="flex items-center gap-1"><button onClick={() => openEditCatalog('areas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar área"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteArea(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar área"
@@ -587,6 +597,45 @@ export default function CatalogosView({ token }) {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {editingCatalog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <form onSubmit={handleEditCatalog} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Editar {editingCatalog.type === 'tipos-equipo' ? 'categoría' : editingCatalog.type === 'empresas' ? 'empresa' : editingCatalog.type === 'bases' ? 'base / ciudad' : 'área'}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Actualiza la información y guarda los cambios.</p>
+              </div>
+              <button type="button" onClick={() => setEditingCatalog(null)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700" title="Cerrar"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">{editingCatalog.type === 'empresas' ? 'Nombre completo de la empresa *' : 'Nombre *'}</label>
+              <input type="text" required autoFocus value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+            </div>
+
+            {editingCatalog.type === 'empresas' && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Acrónimo para equipos (3 letras) *</label>
+                <input type="text" required maxLength="3" value={editForm.acronimo} onChange={(e) => setEditForm({ ...editForm, acronimo: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })} className="w-full rounded-xl border px-3 py-2.5 font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-amber-500" />
+                <p className="mt-1 text-[10px] text-gray-500">Sólo se mostrará en los equipos asociados a esta empresa.</p>
+              </div>
+            )}
+
+            {editingCatalog.type === 'tipos-equipo' && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Descripción (opcional)</label>
+                <textarea rows={3} value={editForm.descripcion} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+            )}
+
+            <div className="flex gap-3 border-t pt-4">
+              <button type="button" onClick={() => setEditingCatalog(null)} className="flex-1 rounded-xl bg-gray-100 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-200">Cancelar</button>
+              <button type="submit" disabled={savingEdit} className="flex-1 rounded-xl bg-black py-2.5 text-sm font-bold text-[#e6b520] hover:bg-neutral-800 disabled:opacity-60">{savingEdit ? 'Guardando...' : 'Guardar cambios'}</button>
+            </div>
+          </form>
         </div>
       )}
     </div>
