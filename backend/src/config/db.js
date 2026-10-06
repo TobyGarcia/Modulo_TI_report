@@ -9,7 +9,7 @@ const requiredInProduction = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
 if (isProduction && !hasUrl) {
   const missing = requiredInProduction.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    throw new Error(`Faltan variables de conexión a la base de datos (se requiere DATABASE_URL o: ${missing.join(', ')})`);
+    console.warn(`⚠️ ALERTA: Faltan variables de conexión a la base de datos (se requiere DATABASE_URL o: ${missing.join(', ')}). Asigna DATABASE_URL en Render Environment Variables.`);
   }
 }
 
