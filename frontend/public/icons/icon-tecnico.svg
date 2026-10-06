@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b45309" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#amberGrad)" />
+  <circle cx="256" cy="256" r="180" fill="#ffffff" opacity="0.12" />
+  
+  <!-- Wrench & Screwdriver Tools -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- QR Corner Brackets -->
+    <path d="M 120 180 L 120 130 A 20 20 0 0 1 140 110 L 190 110" />
+    <path d="M 322 110 L 372 110 A 20 20 0 0 1 392 130 L 392 180" />
+    <path d="M 392 332 L 392 382 A 20 20 0 0 1 372 402 L 322 402" />
+    <path d="M 190 402 L 140 402 A 20 20 0 0 1 120 382 L 120 332" />
+  </g>
+  <!-- Wrench -->
+  <path d="M 215 315 L 325 205 A 25 25 0 0 0 325 170 L 305 150 A 25 25 0 0 0 270 150 L 250 170 L 230 150 L 200 180 L 220 200 L 190 230 A 25 25 0 0 0 190 265 Z" fill="#ffffff" />
+  <!-- Circle hole on wrench handle -->
+  <circle cx="205" cy="325" r="14" fill="#b45309" />
+  <line x1="205" y1="325" x2="335" y2="195" stroke="#ffffff" stroke-width="32" stroke-linecap="round" />
+</svg>

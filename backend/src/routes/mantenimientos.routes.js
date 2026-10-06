@@ -70,7 +70,39 @@ router.get('/', authenticateToken, async (req, res) => {
     query += ' ORDER BY COALESCE(m.fecha_realizado, m.fecha_programada, m.created_at) DESC';
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    const mantenimientos = result.rows;
+
+    if (mantenimientos.length > 0) {
+      const ids = mantenimientos.map(m => m.id);
+      const insumosRes = await pool.query(`
+        SELECT 
+          mi.id,
+          mi.mantenimiento_id,
+          mi.insumo_id,
+          mi.cantidad,
+          i.codigo as insumo_codigo,
+          i.nombre as insumo_nombre,
+          i.unidad_medida,
+          i.presentacion
+        FROM mantenimiento_insumos mi
+        JOIN insumos i ON mi.insumo_id = i.id
+        WHERE mi.mantenimiento_id = ANY($1::int[])
+      `, [ids]);
+
+      const insumosMap = {};
+      for (const item of insumosRes.rows) {
+        if (!insumosMap[item.mantenimiento_id]) {
+          insumosMap[item.mantenimiento_id] = [];
+        }
+        insumosMap[item.mantenimiento_id].push(item);
+      }
+
+      for (const m of mantenimientos) {
+        m.insumos_usados = insumosMap[m.id] || [];
+      }
+    }
+
+    res.json(mantenimientos);
   } catch (err) {
     console.error('Error al obtener mantenimientos:', err);
     res.status(500).json({ error: 'Error al consultar mantenimientos' });
@@ -491,7 +523,48 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mantenimiento no encontrado' });
     }
-    res.json(result.rows[0]);
+
+    const updatedMaint = result.rows[0];
+    const { insumos_usados } = req.body;
+
+    if (Array.isArray(insumos_usados) && insumos_usados.length > 0) {
+      await pool.query('DELETE FROM mantenimiento_insumos WHERE mantenimiento_id = $1', [updatedMaint.id]);
+
+      for (const item of insumos_usados) {
+        const insumoId = parseInt(item.insumo_id, 10);
+        const cant = parseFloat(item.cantidad);
+        if (insumoId && !isNaN(cant) && cant > 0) {
+          try {
+            await pool.query(`
+              INSERT INTO mantenimiento_insumos (mantenimiento_id, insumo_id, cantidad)
+              VALUES ($1, $2, $3)
+            `, [updatedMaint.id, insumoId, cant]);
+
+            await pool.query(`
+              UPDATE insumos
+              SET stock_actual = GREATEST(0, stock_actual - $1),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $2
+            `, [cant, insumoId]);
+
+            await pool.query(`
+              INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
+              VALUES ($1, 'salida_mantenimiento', $2, $3, $4, $5)
+            `, [
+              insumoId,
+              cant,
+              updatedMaint.id,
+              req.user ? req.user.id : null,
+              `Consumo en Mantenimiento #${updatedMaint.id} (${tipo_mantenimiento || 'preventivo'})`
+            ]);
+          } catch (eInsumo) {
+            console.error('Error al actualizar insumo ' + insumoId + ':', eInsumo);
+          }
+        }
+      }
+    }
+
+    res.json(updatedMaint);
   } catch (err) {
     console.error('Error al actualizar mantenimiento:', err);
     res.status(500).json({ error: 'Error al actualizar registro de mantenimiento' });

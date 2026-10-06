@@ -1,8 +1,11 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const pool = require('./config/db');
+const { securityHeaders } = require('./middleware/security.middleware');
 const equiposRoutes = require('./routes/equipos.routes');
 const authRoutes = require('./routes/auth.routes');
 const usuariosRoutes = require('./routes/usuarios.routes');
@@ -15,14 +18,34 @@ const bajasRoutes = require('./routes/bajas.routes');
 const catalogosRoutes = require('./routes/catalogos.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const insumosRoutes = require('./routes/insumos.routes');
+const ticketsRoutes = require('./routes/tickets.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const configuredOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const developmentOrigins = process.env.NODE_ENV === 'production'
+  ? []
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins = [...new Set([...configuredOrigins, ...developmentOrigins])];
 
 // Middlewares
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(cors({
+  origin(origin, callback) {
+    // Las peticiones same-origin, apps móviles y herramientas locales no incluyen Origin.
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) return callback(null, true);
+    return callback(new Error('Origen no autorizado por CORS'));
+  },
+  credentials: false,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rutas API
 app.use('/api/auth', authRoutes);
@@ -37,10 +60,39 @@ app.use('/api/bajas', bajasRoutes);
 app.use('/api/catalogos', catalogosRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/insumos', insumosRoutes);
+app.use('/api/tickets', ticketsRoutes);
 
 // Ruta de comprobación de salud del servidor
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date() });
+});
+
+// Servir frontend compilado en producción (si el directorio dist existe)
+const frontendDistPath = path.join(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health') return next();
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
+
+// Evita respuestas con detalles internos ante peticiones malformadas o cargas inválidas.
+app.use((err, req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'El archivo excede el límite permitido de 5 MB' });
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'La solicitud excede el tamaño permitido' });
+  }
+  if (err?.message === 'Origen no autorizado por CORS') {
+    return res.status(403).json({ error: 'Origen no autorizado' });
+  }
+  if (err?.message === 'Sólo se permiten archivos .xlsx') {
+    return res.status(400).json({ error: err.message });
+  }
+  console.error('Error no controlado:', err);
+  return res.status(500).json({ error: 'Error interno del servidor' });
 });
 
 // Inicialización automática de las tablas y usuario administrador por defecto
@@ -136,6 +188,38 @@ async function initDatabase() {
       (7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
       (8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
       ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // 3.8. Crear tabla principal de equipos si no existe
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS equipos (
+        id SERIAL PRIMARY KEY,
+        item INT,
+        personal_asignado VARCHAR(150),
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        estado_id INT REFERENCES estados_equipo(id) DEFAULT 1,
+        tipo_equipo_id INT REFERENCES tipos_equipo(id) DEFAULT 1,
+        empresa VARCHAR(100),
+        ciudad VARCHAR(100),
+        area VARCHAR(100),
+        hostname VARCHAR(100),
+        marca VARCHAR(100),
+        modelo VARCHAR(100),
+        serial VARCHAR(100) UNIQUE,
+        so VARCHAR(100),
+        cpu VARCHAR(150),
+        ram_capacidad VARCHAR(50),
+        disco_capacidad VARCHAR(50),
+        gpu_tipo VARCHAR(50),
+        gpu_modelo VARCHAR(100),
+        estado_fisico VARCHAR(100),
+        mac_wifi VARCHAR(50),
+        especificaciones_extra JSONB DEFAULT '{}',
+        uso_recomendado TEXT,
+        observaciones TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // 4. Migración de columnas en equipos
@@ -474,15 +558,65 @@ async function initDatabase() {
       WHERE NOT EXISTS (SELECT 1 FROM historial_asignaciones h WHERE h.equipo_id = a.equipo_id AND h.fecha_movimiento = a.fecha_movimiento);
     `);
 
-    // 9. Crear usuario admin si no existe
-    const adminCheck = await pool.query("SELECT id FROM usuarios WHERE username = 'admin'");
-    if (adminCheck.rows.length === 0) {
-      const passwordHash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        "INSERT INTO usuarios (nombre, username, password_hash, role) VALUES ('Administrador', 'admin', $1, 'admin')",
-        [passwordHash]
+    // 9. Crear tabla de tickets_mantenimiento
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tickets_mantenimiento (
+        id SERIAL PRIMARY KEY,
+        folio VARCHAR(30) UNIQUE NOT NULL,
+        equipo_id INT REFERENCES equipos(id) ON DELETE SET NULL,
+        empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+        solicitante_nombre VARCHAR(150) NOT NULL,
+        solicitante_email VARCHAR(150),
+        solicitante_telefono VARCHAR(50),
+        area_solicitante VARCHAR(100),
+        empresa VARCHAR(100),
+        tipo_servicio VARCHAR(50) DEFAULT 'correctivo',
+        categoria_falla VARCHAR(50) DEFAULT 'General',
+        descripcion_problema TEXT NOT NULL,
+        fotos_evidencia JSONB DEFAULT '[]',
+        prioridad VARCHAR(20) DEFAULT 'media',
+        estado VARCHAR(30) DEFAULT 'abierto',
+        supervisor_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        supervisor_nombre VARCHAR(150),
+        tecnico_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+        tecnico_nombre VARCHAR(150),
+        fecha_programada_atencion TIMESTAMP,
+        fecha_inicio_atencion TIMESTAMP,
+        fecha_resolucion TIMESTAMP,
+        motivo_rechazo TEXT,
+        diagnostico_tecnico TEXT,
+        mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE SET NULL,
+        calificacion_servicio INT,
+        comentarios_cierre TEXT,
+        cliente_token_hash VARCHAR(64),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      console.log('Usuario Administrador inicial creado: admin / admin123');
+
+      CREATE INDEX IF NOT EXISTS idx_tickets_folio ON tickets_mantenimiento(folio);
+      CREATE INDEX IF NOT EXISTS idx_tickets_estado ON tickets_mantenimiento(estado);
+      CREATE INDEX IF NOT EXISTS idx_tickets_equipo ON tickets_mantenimiento(equipo_id);
+    `);
+
+    await pool.query('ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS cliente_token_hash VARCHAR(64)');
+
+    // Sólo se crea la primera cuenta cuando el administrador la configura explícitamente.
+    // Nunca se generan credenciales conocidas en un despliegue nuevo.
+    const users = await pool.query('SELECT COUNT(*)::int AS total FROM usuarios');
+    const bootstrapUsername = process.env.BOOTSTRAP_ADMIN_USERNAME;
+    const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+    if (users.rows[0].total === 0 && bootstrapUsername && bootstrapPassword) {
+      if (bootstrapPassword.length < 12) {
+        throw new Error('BOOTSTRAP_ADMIN_PASSWORD debe tener al menos 12 caracteres');
+      }
+      const passwordHash = await bcrypt.hash(bootstrapPassword, 12);
+      await pool.query(
+        "INSERT INTO usuarios (nombre, username, password_hash, role) VALUES ('Administrador', $1, $2, 'admin')",
+        [bootstrapUsername.trim(), passwordHash]
+      );
+      console.log('Cuenta inicial de administrador creada desde variables de entorno.');
+    } else if (users.rows[0].total === 0) {
+      console.warn('No hay usuarios: configura BOOTSTRAP_ADMIN_USERNAME y BOOTSTRAP_ADMIN_PASSWORD para crear la cuenta inicial.');
     }
   } catch (err) {
     console.error('Error al inicializar las tablas de la base de datos:', err);

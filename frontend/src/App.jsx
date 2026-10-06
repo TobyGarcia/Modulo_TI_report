@@ -14,6 +14,16 @@ import M365View from './components/M365View';
 import CatalogosView from './components/CatalogosView';
 import DashboardView from './components/DashboardView';
 import InsumosView from './components/InsumosView';
+import TicketsManagementView from './components/TicketsManagementView';
+
+// PWAs
+import ClientPortal from './components/pwa/ClientPortal';
+import TechnicianPortal from './components/pwa/TechnicianPortal';
+import SupervisorPortal from './components/pwa/SupervisorPortal';
+
+// Assets
+import logoITZ from './assets/logotiposQR/ITZ.png';
+import { Wrench, ShieldCheck, Laptop, Lock, ArrowRight, User } from 'lucide-react';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -71,9 +81,24 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('inicio'); // 'inicio' | 'inventory' | 'catalogos' | 'empleados' | 'bitacora' | 'salidas' | 'm365' | 'users'
-  const [currentView, setCurrentView] = useState('main'); // 'main' | 'print' | 'scan'
+  // Detección inicial de la PWA o portal
+  const [portalMode, setPortalMode] = useState(() => {
+    try {
+      const p = window.location.pathname.toLowerCase();
+      if (p.startsWith('/cliente')) return 'cliente';
+      if (p.startsWith('/tecnico')) return 'tecnico';
+      if (p.startsWith('/supervisor')) return 'supervisor';
+      if (p.startsWith('/scan/')) return 'scan';
+      return 'admin';
+    } catch {
+      return 'admin';
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState('inicio');
+  const [currentView, setCurrentView] = useState('main'); // 'main' | 'print'
   const [scanId, setScanId] = useState(null);
+  const [showScanLogin, setShowScanLogin] = useState(false);
   const [selectedEquipmentsToPrint, setSelectedEquipmentsToPrint] = useState([]);
   const [networkIp, setNetworkIp] = useState('');
   
@@ -83,16 +108,22 @@ export default function App() {
 
   useEffect(() => {
     try {
-      const path = window.location.pathname;
+      const path = window.location.pathname.toLowerCase();
       if (path.startsWith('/scan/')) {
-        const id = path.replace('/scan/', '');
+        const id = window.location.pathname.replace(/^\/scan\//i, '');
         if (id) {
           setScanId(id);
-          setCurrentView('scan');
+          setPortalMode('scan');
         }
+      } else if (path.startsWith('/cliente')) {
+        setPortalMode('cliente');
+      } else if (path.startsWith('/tecnico')) {
+        setPortalMode('tecnico');
+      } else if (path.startsWith('/supervisor')) {
+        setPortalMode('supervisor');
       }
     } catch (e) {
-      console.error('Error al detectar ruta de escaneo:', e);
+      console.error('Error al detectar ruta:', e);
     }
   }, []);
 
@@ -163,20 +194,121 @@ export default function App() {
     setCurrentView('print');
   };
 
-  // 1. Si se escanea un código QR desde un celular (/scan/:id)
-  if (currentView === 'scan' && scanId) {
-    if (!token) {
-      return <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={true} />;
-    }
-    return <ScanResultView equipmentId={scanId} token={token} onLogout={handleLogout} currentUser={user} />;
+  // ================= 1. PWA CLIENTE (/cliente) =================
+  if (portalMode === 'cliente') {
+    return <ClientPortal initialEquipmentId={scanId} />;
   }
 
-  // 2. Si no ha iniciado sesión, mostrar la pantalla de Login
+  // ================= 2. PWA TÉCNICO (/tecnico) =================
+  if (portalMode === 'tecnico') {
+    return (
+      <TechnicianPortal
+        token={token}
+        currentUser={user}
+        onLogout={handleLogout}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
+  // ================= 3. PWA SUPERVISOR (/supervisor) =================
+  if (portalMode === 'supervisor') {
+    return (
+      <SupervisorPortal
+        token={token}
+        currentUser={user}
+        onLogout={handleLogout}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
+  // ================= 4. ESCANEO QR INTELIGENTE (/scan/:id) =================
+  if (portalMode === 'scan' && scanId) {
+    // Si ya está autenticado con credenciales de TI, mostrar consola técnica directa
+    if (token) {
+      return (
+        <ScanResultView
+          equipmentId={scanId}
+          token={token}
+          onLogout={handleLogout}
+          currentUser={user}
+        />
+      );
+    }
+
+    // Si el usuario presiona "Acceso Técnico", mostrar login
+    if (showScanLogin) {
+      return (
+        <div className="relative">
+          <button
+            onClick={() => setShowScanLogin(false)}
+            className="fixed top-4 left-4 z-50 px-3 py-1.5 bg-black/70 text-white rounded-xl text-xs font-semibold backdrop-blur"
+          >
+            ← Volver
+          </button>
+          <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={true} />
+        </div>
+      );
+    }
+
+    // Landing inteligente al escanear QR sin credenciales previas
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-5 text-center border border-amber-500/40 animate-fade-in">
+          <div className="w-14 h-14 bg-white rounded-2xl p-2 flex items-center justify-center mx-auto shadow-md border border-amber-300">
+            <img src={logoITZ} alt="ITZ Logo" className="max-h-full max-w-full object-contain" />
+          </div>
+
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Equipo Identificado</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Etiqueta QR escaneada exitosamente (ID #{scanId})
+            </p>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            {/* Opción 1: Empleado reporta falla */}
+            <button
+              onClick={() => setPortalMode('cliente')}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-lg flex items-center justify-between transition group"
+            >
+              <div className="flex items-center gap-2">
+                <Laptop className="w-4 h-4 text-blue-200" />
+                <div className="text-left">
+                  <div className="leading-tight">Reportar Falla o Falla Técnica</div>
+                  <div className="text-[10px] text-blue-200 font-normal">Levantar ticket en Mesa de Ayuda</div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+            </button>
+
+            {/* Opción 2: Personal técnico */}
+            <button
+              onClick={() => setShowScanLogin(true)}
+              className="w-full py-3 px-4 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-2xl font-bold text-xs flex items-center justify-between transition"
+            >
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-600" />
+                <div className="text-left">
+                  <div className="leading-tight">Acceso Técnico / TI</div>
+                  <div className="text-[10px] text-amber-700 font-normal">Consultar bitácora y mantenimiento</div>
+                </div>
+              </div>
+              <span className="text-xs font-black text-amber-700">Ingresar</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= 5. PANEL GENERAL DE ADMINISTRACIÓN =================
   if (!token) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={false} />;
   }
 
-  // 3. Vista de Impresión de Etiquetas
+  // Vista de Impresión de Etiquetas
   if (currentView === 'print') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
@@ -200,7 +332,6 @@ export default function App() {
     );
   }
 
-  // 4. Panel de Administración Principal (Pestañas de Inventario / Personal / Bitácora / Usuarios)
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row">
       <Sidebar
@@ -215,6 +346,9 @@ export default function App() {
           {activeTab === 'inicio' && (
             <DashboardView token={token} onNavigateTab={(tab) => setActiveTab(tab)} />
           )}
+          {activeTab === 'tickets' && (
+            <TicketsManagementView token={token} currentUser={user} />
+          )}
           {activeTab === 'inventory' && (
             <EquipmentList
               token={token}
@@ -226,7 +360,7 @@ export default function App() {
             />
           )}
           {activeTab === 'insumos' && (
-            <InsumosView user={user} />
+            <InsumosView token={token} user={user} />
           )}
           {activeTab === 'catalogos' && (
             <CatalogosView token={token} />

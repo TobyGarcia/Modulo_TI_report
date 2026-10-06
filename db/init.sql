@@ -108,10 +108,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Usuario Administrador por defecto: (admin / admin123)
-INSERT INTO usuarios (nombre, username, password_hash, role)
-VALUES ('Administrador', 'admin', '$2a$10$eE6sO7oN8g1cRzE/v10f..wKxGvRj1J9dF9iK5L7M3N1O5P9Q2R4u', 'admin')
-ON CONFLICT (username) DO NOTHING;
+-- La cuenta inicial se crea de forma explícita desde las variables
+-- BOOTSTRAP_ADMIN_USERNAME y BOOTSTRAP_ADMIN_PASSWORD en el backend.
 
 -- Tabla de mantenimientos
 CREATE TABLE IF NOT EXISTS mantenimientos (

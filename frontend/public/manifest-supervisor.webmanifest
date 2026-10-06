@@ -1,0 +1,21 @@
+{
+  "id": "sistemaqr-pwa-supervisor",
+  "name": "Sistema QR - Supervisión TI",
+  "short_name": "Supervisor TI",
+  "description": "Aprobación de tickets, asignaciones, agenda de mantenimientos y bitácora SGI",
+  "start_url": "/supervisor",
+  "scope": "/supervisor",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ecfdf5",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/icons/icon-supervisor.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}

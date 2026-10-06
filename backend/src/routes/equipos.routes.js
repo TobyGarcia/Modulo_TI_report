@@ -3,17 +3,47 @@ const multer = require('multer');
 const pool = require('../config/db');
 const { parseExcelBuffer } = require('../services/excel.service');
 const { generateQRDataUrl, getLocalIpAddress } = require('../services/qr.service');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    const isXlsx = file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || file.originalname.toLowerCase().endsWith('.xlsx');
+    callback(isXlsx ? null : new Error('Sólo se permiten archivos .xlsx'), isXlsx);
+  }
+});
 
 // --- Rutas del Sistema ---
 
 // Obtener la IP local de la máquina
-router.get('/info/network-ip', (req, res) => {
+router.get('/info/network-ip', authenticateToken, (req, res) => {
   const localIp = getLocalIpAddress();
   res.json({ ip: localIp, port: 5173 });
+});
+
+// Datos mínimos para que un empleado pueda reportar una falla al escanear
+// una etiqueta QR. No expone responsable, ubicación detallada ni inventario.
+router.get('/public/:id', async (req, res) => {
+  const equipmentId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(equipmentId) || equipmentId <= 0) {
+    return res.status(400).json({ error: 'Identificador de equipo inválido' });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT id, marca, modelo, serial, hostname, area, empresa
+      FROM equipos
+      WHERE id = $1 AND (estado_id IS NULL OR estado_id != 4)
+    `, [equipmentId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Equipo no disponible' });
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al consultar el equipo público:', err);
+    return res.status(500).json({ error: 'No fue posible consultar el equipo' });
+  }
 });
 
 // --- Rutas Protegidas (Exclusivas para Personal de TI Autenticado) ---
@@ -207,7 +237,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Importar equipos desde Excel (Protegido)
-router.post('/import', authenticateToken, upload.single('file'), async (req, res) => {
+router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'), upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No se ha adjuntado ningún archivo Excel' });
   }

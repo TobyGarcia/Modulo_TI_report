@@ -1,0 +1,14 @@
+{
+  "name": "sistema-qr-inventario",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de Gestión e Inventario con Código QR - Configurado para Render y Supabase",
+  "scripts": {
+    "install:backend": "npm install --prefix backend",
+    "install:frontend": "npm install --prefix frontend",
+    "postinstall": "npm run install:backend && npm run install:frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm start --prefix backend",
+    "dev": "docker-compose up --build"
+  }
+}

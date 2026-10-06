@@ -1,11 +1,12 @@
 const express = require('express');
 const pool = require('../config/db');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
 // Todas las rutas de catálogos requieren autenticación previa
 router.use(authenticateToken);
+router.use(authorizeRoles('admin'));
 
 // Obtener todos los catálogos en un solo llamado
 router.get('/', async (req, res) => {

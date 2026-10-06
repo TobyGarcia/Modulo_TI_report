@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Ticket
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab, user, onLogout }) {
@@ -23,6 +24,7 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }) {
 
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
+    { id: 'tickets', label: 'Tickets Mesa de Ayuda', icon: Ticket },
     { id: 'inventory', label: 'Inventario Equipos', icon: Monitor },
     { id: 'insumos', label: 'Insumos & Consumos', icon: Package },
     { id: 'catalogos', label: 'Catálogos', icon: FolderTree },

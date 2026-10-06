@@ -1,12 +1,28 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
 // Todas las rutas de usuarios requieren autenticación previa
 router.use(authenticateToken);
+
+// Supervisión puede asignar tickets, pero sólo necesita conocer el directorio
+// mínimo de técnicos; la administración completa sigue siendo exclusiva de admin.
+router.get('/tecnicos', authorizeRoles('admin', 'supervisor'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, nombre, role FROM usuarios WHERE role = 'tecnico' ORDER BY nombre ASC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al listar técnicos:', err);
+    res.status(500).json({ error: 'Error al consultar técnicos' });
+  }
+});
+
+router.use(authorizeRoles('admin'));
 
 // Listar todos los usuarios
 router.get('/', async (req, res) => {
@@ -45,7 +61,9 @@ router.post('/', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, nombre, username, email, role, created_at;
     `;
-    const values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, role || 'admin'];
+    const allowedRoles = ['admin', 'supervisor', 'tecnico'];
+    const selectedRole = allowedRoles.includes(role) ? role : 'tecnico';
+    const values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, selectedRole];
 
     const result = await pool.query(query, values);
     res.status(201).json(result.rows[0]);
@@ -65,6 +83,8 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Nombre y usuario son requeridos' });
     }
 
+    const allowedRoles = ['admin', 'supervisor', 'tecnico'];
+    const selectedRole = allowedRoles.includes(role) ? role : null;
     let passwordHash = null;
     if (password && password.trim() !== '') {
       passwordHash = await bcrypt.hash(password, 10);
@@ -79,14 +99,14 @@ router.put('/:id', async (req, res) => {
         WHERE id = $6
         RETURNING id, nombre, username, email, role, created_at;
       `;
-      values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, role, id];
+      values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, selectedRole, id];
     } else {
       query = `
         UPDATE usuarios SET nombre = $1, username = $2, email = $3, role = COALESCE($4, role)
         WHERE id = $5
         RETURNING id, nombre, username, email, role, created_at;
       `;
-      values = [nombre.trim(), username.trim(), email ? email.trim() : null, role, id];
+      values = [nombre.trim(), username.trim(), email ? email.trim() : null, selectedRole, id];
     }
 
     const result = await pool.query(query, values);

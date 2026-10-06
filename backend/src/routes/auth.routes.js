@@ -3,11 +3,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth.middleware');
+const { createRateLimiter } = require('../middleware/security.middleware');
 
 const router = express.Router();
 
 // POST /api/auth/login - Inicio de Sesión
-router.post('/login', async (req, res) => {
+const loginRateLimit = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Demasiados intentos de inicio de sesión. Intenta nuevamente en unos minutos.'
+});
+
+router.post('/login', loginRateLimit, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -30,7 +37,12 @@ router.post('/login', async (req, res) => {
 
     // Generar Token JWT firmado con la llave secreta de 32 bytes
     const payload = { id: user.id, username: user.username, role: user.role, nombre: user.nombre };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: '8h',
+      algorithm: 'HS256',
+      issuer: 'sistema-qr',
+      audience: 'sistema-qr-web'
+    });
 
     res.json({
       message: 'Inicio de sesión exitoso',

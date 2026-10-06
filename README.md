@@ -58,7 +58,7 @@ Antes de comenzar, asegúrate de tener instalado:
    ```bash
    cp .env.example .env
    ```
-   *(Modifica las variables en `.env` si necesitas cambiar puertos, contraseñas o tokens)*
+   Define valores únicos y seguros para `POSTGRES_PASSWORD` y `JWT_SECRET`. Para una base nueva, define también `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD` (12 caracteres o más); ya no se crean usuarios con contraseñas conocidas. Configura `CORS_ORIGINS` con el dominio público autorizado.
 
 3. **Iniciar los servicios:**
    ```bash
@@ -72,12 +72,34 @@ Antes de comenzar, asegúrate de tener instalado:
 
 ---
 
-## 🔑 Credenciales por Defecto
+## 🔑 Cuenta inicial
 
-Al inicializar la base de datos por primera vez (mediante `db/init.sql`), se crea un usuario administrador por defecto:
+En una instalación nueva no existen credenciales predeterminadas. El backend crea la primera cuenta administradora sólo si se proporcionan `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD` antes del primer arranque. Después, crea cuentas desde la administración de usuarios.
 
-- **Usuario:** `admin`
-- **Contraseña:** `admin123`
+---
+
+## 🌐 Despliegue en Render y Supabase
+
+El proyecto está 100% preparado para ser desplegado en la nube utilizando **Render** (para la aplicación web) y **Supabase** (para la base de datos PostgreSQL).
+
+### 1. Configuración de Base de Datos en Supabase
+1. Crea un nuevo proyecto en [Supabase](https://supabase.com/).
+2. Dirígete a **Project Settings > Database** y copia el **URI / Connection String** (Transaction Pooler en puerto `6543` o directo en `5432`).
+3. No es necesario ejecutar código SQL manualmente; el backend inicializará y creará automáticamente las tablas y catálogos en Supabase durante el primer arranque.
+
+### 2. Despliegue en Render
+- **Opción Blueprint (`render.yaml`)**:
+  1. Conecta tu repositorio de GitHub a [Render Dashboard](https://dashboard.render.com/).
+  2. Selecciona **New + > Blueprint** y selecciona el repositorio. Render leerá automáticamente la configuración de `render.yaml`.
+  3. Ingresa la variable `DATABASE_URL` (la URI de Supabase), `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD`.
+  4. Haz clic en **Apply**. Render compilará el frontend y servirá la API y el cliente web en un único servicio web HTTPS.
+
+- **Opción Web Service Manual**:
+  1. Selecciona **New + > Web Service**.
+  2. Configura:
+     - **Build Command:** `npm run build`
+     - **Start Command:** `npm start`
+  3. En **Environment Variables**, establece `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD`.
 
 ---
 
@@ -111,7 +133,7 @@ Sistema_QR/
 
 ## 🛡️ Seguridad
 
-> **IMPORTANTE**: Asegúrate de **NO** subir el archivo `.env` con credenciales reales o secretos de producción a tu repositorio público de GitHub. Utiliza siempre `.env.example` como plantilla.
+> **IMPORTANTE**: No subas `.env` con credenciales reales. En producción, `JWT_SECRET` es obligatorio y los orígenes permitidos se definen con `CORS_ORIGINS`. La consulta y calificación pública de tickets requiere además el código privado generado al registrar el ticket; el navegador lo conserva únicamente en el dispositivo que lo creó.
 
 ---
 

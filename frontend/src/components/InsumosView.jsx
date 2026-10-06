@@ -22,8 +22,35 @@ import {
   X
 } from 'lucide-react';
 
-export default function InsumosView({ user }) {
+const PRESET_CATEGORIAS = [
+  'General',
+  'Limpieza y Mantenimiento',
+  'Pastas y Disipadores Térmicos',
+  'Componentes y Refacciones',
+  'Cables y Conectores',
+  'Consumibles e Impresión',
+  'Herramientas y Accesorios',
+  'Redes y Comunicaciones'
+];
+
+const PRESET_UNIDADES_MEDIDA = [
+  'Pza',
+  'ml',
+  'L',
+  'g',
+  'kg',
+  'Lata',
+  'Bote / Frasco',
+  'Caja / Paquete',
+  'Metro',
+  'Kit'
+];
+
+export default function InsumosView({ token: tokenProp, user }) {
   const [activeTab, setActiveTab] = useState('inventario'); // 'inventario' | 'recetas' | 'reportes' | 'movimientos'
+
+  // Token robusto (prop > jwt_token > token)
+  const token = tokenProp || localStorage.getItem('jwt_token') || localStorage.getItem('token');
 
   // Estados del inventario de insumos
   const [insumos, setInsumos] = useState([]);
@@ -79,11 +106,6 @@ export default function InsumosView({ user }) {
   // Estados del Historial de Movimientos
   const [movimientos, setMovimientos] = useState([]);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
-
-  // -------------------------------------------------------------
-  // CARGA DE DATOS
-  // -------------------------------------------------------------
-  const token = localStorage.getItem('token');
 
   const fetchInsumos = async () => {
     try {
@@ -177,7 +199,7 @@ export default function InsumosView({ user }) {
 
   // Obtener categorías únicas para filtro
   const categoriasUnicas = useMemo(() => {
-    const set = new Set(insumos.map((i) => i.categoria).filter(Boolean));
+    const set = new Set([...PRESET_CATEGORIAS, ...insumos.map((i) => i.categoria).filter(Boolean)]);
     return Array.from(set);
   }, [insumos]);
 
@@ -238,12 +260,12 @@ export default function InsumosView({ user }) {
         setShowInsumoModal(false);
         fetchInsumos();
       } else {
-        const errData = await res.json();
-        alert(errData.error || 'Error al guardar insumo');
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || `Error ${res.status}: No se pudo guardar el insumo`);
       }
     } catch (err) {
       console.error('Error al guardar insumo:', err);
-      alert('Error de conexión con el servidor');
+      alert('Error de comunicación con el servidor: ' + (err.message || err));
     }
   };
 
@@ -1031,14 +1053,18 @@ export default function InsumosView({ user }) {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-neutral-300 font-mono mb-1">Categoría:</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Limpieza, Pasta Térmica, Cables"
+                  <label className="block font-bold text-neutral-300 font-mono mb-1">Categoría *:</label>
+                  <select
                     value={insumoForm.categoria}
                     onChange={(e) => setInsumoForm({ ...insumoForm, categoria: e.target.value })}
-                    className="w-full bg-neutral-950 text-white px-3 py-2 rounded-lg border border-neutral-800 focus:outline-none focus:border-amber-500"
-                  />
+                    className="w-full bg-neutral-950 text-white px-3 py-2 rounded-lg border border-neutral-800 focus:outline-none focus:border-amber-500 font-medium"
+                  >
+                    {PRESET_CATEGORIAS.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1056,15 +1082,18 @@ export default function InsumosView({ user }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-neutral-300 font-mono mb-1">Unidad de Medida (ej: pza, ml, g, lata):</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej: Pza, ml, g, Lata"
+                  <label className="block font-bold text-neutral-300 font-mono mb-1">Unidad de Medida *:</label>
+                  <select
                     value={insumoForm.unidad_medida}
                     onChange={(e) => setInsumoForm({ ...insumoForm, unidad_medida: e.target.value })}
-                    className="w-full bg-neutral-950 text-white px-3 py-2 rounded-lg border border-neutral-800 focus:outline-none focus:border-amber-500"
-                  />
+                    className="w-full bg-neutral-950 text-white px-3 py-2 rounded-lg border border-neutral-800 focus:outline-none focus:border-amber-500 font-medium"
+                  >
+                    {PRESET_UNIDADES_MEDIDA.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

@@ -3,8 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sistema de Inventario & Etiquetas QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta id="theme-color-meta" name="theme-color" content="#1d4ed8" />
+    <title id="page-title">Sistema de Inventario & Etiquetas QR</title>
+
+    <!-- Inyector Dinámico de Manifest según la ruta (Multi-PWA en Ngrok) -->
+    <script>
+      (function() {
+        const path = window.location.pathname.toLowerCase();
+        let manifestHref = '/manifest-cliente.webmanifest';
+        let themeColor = '#1d4ed8';
+        let title = 'Sistema QR - Mesa de Ayuda';
+
+        if (path.startsWith('/tecnico')) {
+          manifestHref = '/manifest-tecnico.webmanifest';
+          themeColor = '#b45309';
+          title = 'Sistema QR - Soporte Técnico';
+        } else if (path.startsWith('/supervisor')) {
+          manifestHref = '/manifest-supervisor.webmanifest';
+          themeColor = '#047857';
+          title = 'Sistema QR - Supervisión TI';
+        } else if (path.startsWith('/cliente')) {
+          manifestHref = '/manifest-cliente.webmanifest';
+          themeColor = '#1d4ed8';
+          title = 'Sistema QR - Mesa de Ayuda';
+        } else {
+          manifestHref = '/manifest-tecnico.webmanifest';
+          themeColor = '#000000';
+          title = 'Sistema de Inventario & QR ITZ';
+        }
+
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestHref;
+        document.head.appendChild(link);
+
+        const themeMeta = document.getElementById('theme-color-meta');
+        if (themeMeta) themeMeta.setAttribute('content', themeColor);
+        document.title = title;
+
+        // Registrar Service Worker para soporte PWA e instalación en dispositivos
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then((reg) => console.log('Service Worker PWA registrado con éxito:', reg.scope))
+              .catch((err) => console.warn('Error al registrar Service Worker:', err));
+          });
+        }
+      })();
+    </script>
   </head>
   <body class="bg-gray-50 text-gray-900 font-sans antialiased">
     <div id="root"></div>

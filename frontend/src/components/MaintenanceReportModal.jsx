@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FileCheck, X, Check, Laptop, Camera, Trash2, ShieldCheck, Search, Upload } from 'lucide-react';
+import { FileCheck, X, Check, Laptop, Camera, Trash2, ShieldCheck, Search, Upload, Package } from 'lucide-react';
 import SignatureCanvas from './SignatureCanvas';
 
 // Presets predefinidos de Tipo de Trabajo y Material Utilizado según especificación SGI
@@ -100,7 +100,7 @@ export default function MaintenanceReportModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
     fetch('/api/insumos', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(data => Array.isArray(data) && setCatalogInsumos(data))
@@ -153,6 +153,7 @@ export default function MaintenanceReportModal({
         observaciones_equipo: existingMaintenance?.observaciones_equipo || '',
         trabajo_realizado: existingMaintenance?.trabajo_realizado || '',
         material_utilizado: existingMaintenance?.material_utilizado || '',
+        insumos_usados: existingMaintenance?.insumos_usados || [],
         imagenes_evidencia: existingMaintenance?.imagenes_evidencia
           ? (typeof existingMaintenance.imagenes_evidencia === 'string'
             ? JSON.parse(existingMaintenance.imagenes_evidencia)
@@ -165,6 +166,31 @@ export default function MaintenanceReportModal({
     }
     setEqSearchFilter('');
   }, [isOpen, equipment?.id, existingMaintenance?.id]);
+
+  // Auto-cargar la receta predefinida (ej. "Preventivo Basíco") cuando no hay insumos cargados aún
+  useEffect(() => {
+    if (!isOpen || !catalogRecetas.length) return;
+    const tipo = formData.tipo_mantenimiento || 'preventivo';
+    if (!formData.insumos_usados || formData.insumos_usados.length === 0) {
+      const rec = catalogRecetas.find(
+        r => r.tipo_mantenimiento === tipo || (tipo === 'preventivo' && r.nombre.toLowerCase().includes('preventivo'))
+      );
+      if (rec && rec.insumos && rec.insumos.length > 0) {
+        const formatted = rec.insumos.map(item => ({
+          insumo_id: item.insumo_id,
+          cantidad: item.cantidad
+        }));
+        const textoMateriales = rec.insumos
+          .map(i => `${i.insumo_nombre} (${i.cantidad} ${i.unidad_medida})`)
+          .join(', ');
+        setFormData(prev => ({
+          ...prev,
+          insumos_usados: formatted,
+          material_utilizado: prev.material_utilizado || textoMateriales
+        }));
+      }
+    }
+  }, [isOpen, catalogRecetas, formData.tipo_mantenimiento]);
 
   // Memorización de la lista de equipos filtrados
   const filteredEquipments = useMemo(() => {
@@ -590,8 +616,9 @@ export default function MaintenanceReportModal({
             {/* Cargar Receta de Mantenimiento & Descuento de Almacén */}
             {catalogRecetas.length > 0 && (
               <div>
-                <label className="block text-xs font-bold text-amber-900 mb-1">
-                  📦 Cargar Receta de Insumos de Almacén:
+                <label className="flex items-center gap-1.5 text-xs font-bold text-amber-900 mb-1">
+                  <Package className="w-4 h-4" />
+                  <span>Cargar Receta de Insumos de Almacén:</span>
                 </label>
                 <select
                   onChange={(e) => {

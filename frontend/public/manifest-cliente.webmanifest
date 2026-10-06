@@ -1,0 +1,21 @@
+{
+  "id": "sistemaqr-pwa-cliente",
+  "name": "Sistema QR - Mesa de Ayuda",
+  "short_name": "Mesa Ayuda TI",
+  "description": "Reporte y seguimiento de tickets de mantenimiento de equipos para empleados",
+  "start_url": "/cliente",
+  "scope": "/cliente",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#eff6ff",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/icons/icon-cliente.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}

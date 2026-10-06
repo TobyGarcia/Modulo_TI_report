@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="110" fill="url(#blueGrad)" />
+  <circle cx="256" cy="256" r="180" fill="#ffffff" opacity="0.12" />
+  
+  <!-- Headset / Ticket / Support Icon -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- QR Code Scan Corners -->
+    <path d="M 120 180 L 120 130 A 20 20 0 0 1 140 110 L 190 110" />
+    <path d="M 322 110 L 372 110 A 20 20 0 0 1 392 130 L 392 180" />
+    <path d="M 392 332 L 392 382 A 20 20 0 0 1 372 402 L 322 402" />
+    <path d="M 190 402 L 140 402 A 20 20 0 0 1 120 382 L 120 332" />
+    
+    <!-- Central Ticket & Spark -->
+    <rect x="180" y="170" width="152" height="172" rx="18" fill="#ffffff" />
+    <line x1="210" y1="215" x2="302" y2="215" stroke="#1d4ed8" stroke-width="16" />
+    <line x1="210" y1="255" x2="275" y2="255" stroke="#1d4ed8" stroke-width="16" />
+    <line x1="210" y1="295" x2="250" y2="295" stroke="#1d4ed8" stroke-width="16" />
+  </g>
+</svg>
