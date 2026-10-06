@@ -105,14 +105,18 @@ router.delete('/tipos-equipo/:id', async (req, res) => {
 
 router.post('/empresas', async (req, res) => {
   try {
-    const { nombre } = req.body;
+    const { nombre, acronimo } = req.body;
     if (!nombre || !nombre.trim()) {
-      return res.status(400).json({ error: 'El nombre de la empresa es obligatorio' });
+      return res.status(400).json({ error: 'El nombre completo de la empresa es obligatorio' });
+    }
+    const acronym = (acronimo || '').trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(acronym)) {
+      return res.status(400).json({ error: 'El acrónimo debe tener exactamente 3 letras' });
     }
 
     const result = await pool.query(
-      'INSERT INTO catalogos_empresas (nombre) VALUES ($1) RETURNING *',
-      [nombre.trim()]
+      'INSERT INTO catalogos_empresas (nombre, acronimo) VALUES ($1, $2) RETURNING *',
+      [nombre.trim(), acronym]
     );
 
     res.status(201).json(result.rows[0]);
@@ -122,6 +126,43 @@ router.post('/empresas', async (req, res) => {
       return res.status(400).json({ error: 'La empresa ya está registrada' });
     }
     res.status(500).json({ error: 'Error al registrar empresa' });
+  }
+});
+
+router.put('/empresas/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { nombre, acronimo } = req.body;
+    const fullName = (nombre || '').trim();
+    const acronym = (acronimo || '').trim().toUpperCase();
+    if (!fullName || !/^[A-Z]{3}$/.test(acronym)) {
+      return res.status(400).json({ error: 'Indica el nombre completo y un acrónimo de 3 letras' });
+    }
+
+    await client.query('BEGIN');
+    const previous = await client.query('SELECT * FROM catalogos_empresas WHERE id = $1 FOR UPDATE', [id]);
+    if (previous.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Empresa no encontrada' });
+    }
+    const old = previous.rows[0];
+    const result = await client.query(
+      'UPDATE catalogos_empresas SET nombre = $1, acronimo = $2 WHERE id = $3 RETURNING *',
+      [fullName, acronym, id]
+    );
+    // Personal muestra el nombre completo; inventario conserva sólo el acrónimo.
+    await client.query('UPDATE empleados SET empresa = $1 WHERE empresa = $2', [fullName, old.nombre]);
+    await client.query('UPDATE equipos SET empresa = $1 WHERE empresa = $2 OR empresa = $3', [acronym, old.acronimo, old.nombre]);
+    await client.query('COMMIT');
+    res.json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error al actualizar empresa:', err);
+    if (err.code === '23505') return res.status(400).json({ error: 'El nombre o acrónimo ya está registrado' });
+    res.status(500).json({ error: 'Error al actualizar empresa' });
+  } finally {
+    client.release();
   }
 });
 
@@ -140,6 +181,20 @@ router.delete('/empresas/:id', async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar empresa' });
   }
 });
+
+async function updateSimpleCatalog(req, res, table, label) {
+  try {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: `El nombre de ${label} es obligatorio` });
+    const result = await pool.query(`UPDATE ${table} SET nombre = $1 WHERE id = $2 RETURNING *`, [nombre, req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: `${label} no encontrado` });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(`Error al actualizar ${label}:`, err);
+    if (err.code === '23505') return res.status(400).json({ error: `Ya existe ${label} con ese nombre` });
+    res.status(500).json({ error: `Error al actualizar ${label}` });
+  }
+}
 
 // --- CRUD BASES / CIUDADES ---
 
@@ -181,6 +236,8 @@ router.delete('/bases/:id', async (req, res) => {
   }
 });
 
+router.put('/bases/:id', (req, res) => updateSimpleCatalog(req, res, 'catalogos_bases', 'la base/ciudad'));
+
 // --- CRUD ÁREAS ---
 
 router.post('/areas', async (req, res) => {
@@ -220,5 +277,7 @@ router.delete('/areas/:id', async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar área' });
   }
 });
+
+router.put('/areas/:id', (req, res) => updateSimpleCatalog(req, res, 'catalogos_areas', 'el área'));
 
 module.exports = router;

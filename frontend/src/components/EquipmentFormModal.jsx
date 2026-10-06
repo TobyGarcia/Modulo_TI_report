@@ -214,11 +214,11 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   value={formData.empresa || ''}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Ej. ITZ OIL & GAS"
+                  placeholder="Ej. ITZ"
                 />
                 <datalist id="empresas-list">
                   {catalogos.empresas.map(emp => (
-                    <option key={emp.id} value={emp.nombre} />
+                    <option key={emp.id} value={emp.acronimo || emp.nombre}>{emp.acronimo ? `${emp.acronimo} — ${emp.nombre}` : emp.nombre}</option>
                   ))}
                 </datalist>
               </div>

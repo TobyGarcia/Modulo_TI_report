@@ -4,6 +4,7 @@ import Pagination from './Pagination';
 
 export default function EmployeeManagement({ token }) {
   const [employees, setEmployees] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,6 +45,10 @@ export default function EmployeeManagement({ token }) {
 
   useEffect(() => {
     fetchEmployees();
+    fetch('/api/catalogos', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setCompanies(Array.isArray(data?.empresas) ? data.empresas : []))
+      .catch(err => console.error('Error al cargar empresas:', err));
   }, [token]);
 
   const handleSearchChange = (e) => {
@@ -345,14 +350,18 @@ export default function EmployeeManagement({ token }) {
                 </div>
 
                 <div>
-                  <label className="font-bold text-gray-700 block mb-1">Empresa</label>
+                  <label className="font-bold text-gray-700 block mb-1">Empresa (nombre completo)</label>
                   <input
                     type="text"
+                    list="employee-companies-list"
                     value={formData.empresa}
                     onChange={(e) => setFormData({ ...formData, empresa: e.target.value })}
                     placeholder="Ej. ITZ OIL & GAS"
                     className="w-full bg-white border rounded-xl p-2.5 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                  <datalist id="employee-companies-list">
+                    {companies.map(company => <option key={company.id} value={company.nombre} />)}
+                  </datalist>
                 </div>
               </div>
 

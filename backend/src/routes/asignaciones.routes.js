@@ -115,6 +115,11 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empleado no encontrado' });
     }
     const empleado = empRes.rows[0];
+    const companyRes = await client.query(
+      'SELECT acronimo FROM catalogos_empresas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
+      [empleado.empresa || '']
+    );
+    const empresaEquipo = companyRes.rows[0]?.acronimo || empleado.empresa;
 
     // Actualizar equipo: asignar empleado_id, personal_asignado y cambiar estado a 'Asignado' (ID 2)
     const updateQuery = `
@@ -122,7 +127,7 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
         empleado_id = $1,
         personal_asignado = $2,
         area = COALESCE(area, $3),
-        empresa = COALESCE(empresa, $4),
+        empresa = COALESCE($4, empresa),
         estado_id = 2,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $5
@@ -132,7 +137,7 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
       empleado.id,
       empleado.nombre,
       empleado.area,
-      empleado.empresa,
+      empresaEquipo,
       id
     ]);
 
@@ -322,6 +327,11 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Nuevo empleado no encontrado' });
     }
     const nuevoEmpleado = empNew.rows[0];
+    const companyRes = await client.query(
+      'SELECT acronimo FROM catalogos_empresas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
+      [nuevoEmpleado.empresa || '']
+    );
+    const empresaEquipo = companyRes.rows[0]?.acronimo || nuevoEmpleado.empresa;
 
     // 3. Registrar desasignación previa si tenía empleado
     if (empleadoIdAnterior) {
@@ -362,7 +372,7 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
         empleado_id = $1,
         personal_asignado = $2,
         area = COALESCE(area, $3),
-        empresa = COALESCE(empresa, $4),
+        empresa = COALESCE($4, empresa),
         estado_id = 2,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $5
@@ -372,7 +382,7 @@ router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
       nuevoEmpleado.id,
       nuevoEmpleado.nombre,
       nuevoEmpleado.area,
-      nuevoEmpleado.empresa,
+      empresaEquipo,
       id
     ]);
     const equipoActualizado = eqRes.rows[0];

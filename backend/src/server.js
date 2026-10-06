@@ -161,6 +161,7 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS catalogos_empresas (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(100) UNIQUE NOT NULL,
+        acronimo VARCHAR(3) UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -175,6 +176,16 @@ async function initDatabase() {
         nombre VARCHAR(100) UNIQUE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    // El nombre completo se usa para personal; el acrónimo de tres letras para equipos.
+    await pool.query(`
+      ALTER TABLE catalogos_empresas ADD COLUMN IF NOT EXISTS acronimo VARCHAR(3);
+      CREATE UNIQUE INDEX IF NOT EXISTS catalogos_empresas_acronimo_unique
+        ON catalogos_empresas (acronimo) WHERE acronimo IS NOT NULL;
+      UPDATE catalogos_empresas
+      SET acronimo = 'ITZ'
+      WHERE UPPER(TRIM(nombre)) = 'ITZ OIL & GAS' AND acronimo IS NULL;
     `);
 
     await pool.query(`

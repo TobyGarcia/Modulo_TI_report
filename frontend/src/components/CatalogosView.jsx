@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Plus, Trash2, RefreshCw, FolderTree, Building2, MapPin, Briefcase, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Layers, Plus, Trash2, RefreshCw, FolderTree, Building2, MapPin, Briefcase, AlertCircle, CheckCircle2, Edit3 } from 'lucide-react';
 
 export default function CatalogosView({ token }) {
   const [catalogos, setCatalogos] = useState({
@@ -15,7 +15,7 @@ export default function CatalogosView({ token }) {
 
   // Forms
   const [newTipo, setNewTipo] = useState({ nombre: '', descripcion: '' });
-  const [newEmpresa, setNewEmpresa] = useState('');
+  const [newEmpresa, setNewEmpresa] = useState({ nombre: '', acronimo: '' });
   const [newBase, setNewBase] = useState('');
   const [newArea, setNewArea] = useState('');
 
@@ -103,7 +103,7 @@ export default function CatalogosView({ token }) {
   // --- Handlers for Empresas ---
   const handleAddEmpresa = async (e) => {
     e.preventDefault();
-    if (!newEmpresa.trim()) return;
+    if (!newEmpresa.nombre.trim() || !/^[a-zA-Z]{3}$/.test(newEmpresa.acronimo.trim())) return;
     try {
       const res = await fetch('/api/catalogos/empresas', {
         method: 'POST',
@@ -111,12 +111,42 @@ export default function CatalogosView({ token }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ nombre: newEmpresa })
+        body: JSON.stringify(newEmpresa)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar empresa');
-      setNewEmpresa('');
+      setNewEmpresa({ nombre: '', acronimo: '' });
       showNotification('Empresa añadida al catálogo');
+      fetchCatalogos();
+    } catch (err) {
+      showNotification(err.message, true);
+    }
+  };
+
+  const handleEditCatalog = async (type, item) => {
+    const labels = { 'tipos-equipo': 'la categoría', empresas: 'la empresa', bases: 'la base/ciudad', areas: 'el área' };
+    const nombre = window.prompt(`Editar nombre de ${labels[type]}:`, item.nombre);
+    if (nombre === null || !nombre.trim()) return;
+    const payload = { nombre: nombre.trim() };
+    if (type === 'empresas') {
+      const acronimo = window.prompt('Acrónimo de 3 letras para los equipos:', item.acronimo || '');
+      if (acronimo === null) return;
+      if (!/^[a-zA-Z]{3}$/.test(acronimo.trim())) {
+        showNotification('El acrónimo debe tener exactamente 3 letras.', true);
+        return;
+      }
+      payload.acronimo = acronimo.trim().toUpperCase();
+    }
+    if (type === 'tipos-equipo') payload.descripcion = item.descripcion || '';
+    try {
+      const res = await fetch(`/api/catalogos/${type}/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar');
+      showNotification('Registro actualizado correctamente');
       fetchCatalogos();
     } catch (err) {
       showNotification(err.message, true);
@@ -363,15 +393,22 @@ export default function CatalogosView({ token }) {
             {activeSubTab === 'empresas' && (
               <form onSubmit={handleAddEmpresa} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre de la Empresa *</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre completo de la Empresa *</label>
                   <input
                     type="text"
                     required
-                    value={newEmpresa}
-                    onChange={(e) => setNewEmpresa(e.target.value)}
-                    placeholder="Ej. SUBSEA LOGISTICS"
+                    value={newEmpresa.nombre}
+                    onChange={(e) => setNewEmpresa({ ...newEmpresa, nombre: e.target.value })}
+                    placeholder="Ej. ITZ OIL & GAS"
                     className="w-full border rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Acrónimo para equipos (3 letras) *</label>
+                  <input type="text" required maxLength="3" value={newEmpresa.acronimo}
+                    onChange={(e) => setNewEmpresa({ ...newEmpresa, acronimo: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })}
+                    placeholder="Ej. ITZ" className="w-full border rounded-xl px-3 py-2 text-xs font-mono uppercase focus:ring-2 focus:ring-amber-500 outline-none" />
+                  <p className="mt-1 text-[10px] text-gray-500">Se mostrará sólo en el inventario de equipos.</p>
                 </div>
                 <button
                   type="submit"
@@ -465,6 +502,8 @@ export default function CatalogosView({ token }) {
                         )}
                       </div>
                       {item.id !== 1 ? (
+                        <div className="flex items-center gap-1">
+                        <button onClick={() => handleEditCatalog('tipos-equipo', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar categoría"><Edit3 className="w-4 h-4" /></button>
                         <button
                           onClick={() => handleDeleteTipo(item.id, item.nombre)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
@@ -472,6 +511,7 @@ export default function CatalogosView({ token }) {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                        </div>
                       ) : (
                         <span className="text-[10px] text-gray-400 italic">Sistema</span>
                       )}
@@ -488,15 +528,15 @@ export default function CatalogosView({ token }) {
                     <div key={item.id} className="p-4 flex items-center justify-between hover:bg-amber-50/30 transition">
                       <div className="flex items-center space-x-2">
                         <Building2 className="w-4 h-4 text-indigo-600" />
-                        <span className="font-semibold text-gray-900 text-sm">{item.nombre}</span>
+                        <div><span className="font-semibold text-gray-900 text-sm">{item.nombre}</span><p className="text-[10px] text-gray-500 font-mono">Equipos: {item.acronimo || 'Sin acrónimo'}</p></div>
                       </div>
-                      <button
+                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('empresas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar empresa"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteEmpresa(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar empresa"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button></div>
                     </div>
                   ))
                 )
@@ -512,13 +552,13 @@ export default function CatalogosView({ token }) {
                         <MapPin className="w-4 h-4 text-emerald-600" />
                         <span className="font-semibold text-gray-900 text-sm">{item.nombre}</span>
                       </div>
-                      <button
+                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('bases', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar base/ciudad"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteBase(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar base/ciudad"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button></div>
                     </div>
                   ))
                 )
@@ -534,13 +574,13 @@ export default function CatalogosView({ token }) {
                         <Briefcase className="w-4 h-4 text-purple-600" />
                         <span className="font-semibold text-gray-900 text-sm">{item.nombre}</span>
                       </div>
-                      <button
+                      <div className="flex items-center gap-1"><button onClick={() => handleEditCatalog('areas', item)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Editar área"><Edit3 className="w-4 h-4" /></button><button
                         onClick={() => handleDeleteArea(item.id, item.nombre)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
                         title="Eliminar área"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button></div>
                     </div>
                   ))
                 )

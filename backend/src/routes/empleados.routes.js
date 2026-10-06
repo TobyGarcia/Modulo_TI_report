@@ -4,6 +4,15 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+async function getCompanyForEmployee(companyName) {
+  const requestedName = (companyName || '').trim() || 'ITZ OIL & GAS';
+  const result = await pool.query(
+    'SELECT nombre FROM catalogos_empresas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
+    [requestedName]
+  );
+  return result.rows[0]?.nombre || requestedName;
+}
+
 // Listar empleados (Protegido)
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -78,6 +87,7 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: `Ya existe un empleado registrado con el nombre "${nombre.trim()}"` });
     }
 
+    const empresaNombre = await getCompanyForEmployee(empresa);
     const query = `
       INSERT INTO empleados (nombre, area, empresa, no_empleado, puesto, email, estado)
       VALUES ($1, $2, $3, $4, $5, $6, 'activo')
@@ -87,7 +97,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const values = [
       nombre.trim(),
       area ? area.trim() : 'General',
-      empresa ? empresa.trim() : 'ITZ OIL & GAS',
+      empresaNombre,
       no_empleado ? no_empleado.trim() : null,
       puesto ? puesto.trim() : null,
       email ? email.trim() : null
@@ -107,6 +117,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { nombre, area, empresa, no_empleado, puesto, email, estado } = req.body;
 
+    const empresaNombre = await getCompanyForEmployee(empresa);
     const query = `
       UPDATE empleados SET
         nombre = $1, area = $2, empresa = $3, no_empleado = $4, puesto = $5, email = $6,
@@ -118,7 +129,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const values = [
       nombre ? nombre.trim() : '',
       area ? area.trim() : 'General',
-      empresa ? empresa.trim() : 'ITZ OIL & GAS',
+      empresaNombre,
       no_empleado ? no_empleado.trim() : null,
       puesto ? puesto.trim() : null,
       email ? email.trim() : null,
@@ -131,11 +142,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empleado no encontrado' });
     }
 
-    // Actualizar nombre y área en equipos si cambió
+    // Actualizar nombre y área en equipos si cambió. El equipo guarda el acrónimo de la empresa.
     if (nombre) {
+      const companyResult = await pool.query(
+        'SELECT acronimo FROM catalogos_empresas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
+        [empresaNombre]
+      );
       await pool.query(
         'UPDATE equipos SET personal_asignado = $1, area = COALESCE($2, area), empresa = COALESCE($3, empresa) WHERE empleado_id = $4',
-        [nombre.trim(), area ? area.trim() : null, empresa ? empresa.trim() : null, id]
+        [nombre.trim(), area ? area.trim() : null, companyResult.rows[0]?.acronimo || null, id]
       );
     }
 

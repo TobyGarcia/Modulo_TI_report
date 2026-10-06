@@ -4,6 +4,7 @@ import SignatureCanvas from './SignatureCanvas';
 
 export default function AssignmentModal({ isOpen, onClose, equipment, token, onAssignmentSuccess }) {
   const [employees, setEmployees] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [isNewEmployee, setIsNewEmployee] = useState(false);
 
@@ -22,6 +23,17 @@ export default function AssignmentModal({ isOpen, onClose, equipment, token, onA
   useEffect(() => {
     if (isOpen) {
       fetchEmployees();
+      fetch('/api/catalogos', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          const registeredCompanies = Array.isArray(data?.empresas) ? data.empresas : [];
+          setCompanies(registeredCompanies);
+          const matchingCompany = registeredCompanies.find(company => company.acronimo === equipment?.empresa);
+          if (matchingCompany) {
+            setNewEmployeeData(current => ({ ...current, empresa: matchingCompany.nombre }));
+          }
+        })
+        .catch(err => console.error('Error al cargar empresas:', err));
       setSelectedEmployeeId('');
       setIsNewEmployee(false);
       setNewEmployeeData({
@@ -218,14 +230,18 @@ export default function AssignmentModal({ isOpen, onClose, equipment, token, onA
                 </div>
 
                 <div>
-                  <label className="font-bold text-gray-700 block mb-1">Empresa</label>
+                  <label className="font-bold text-gray-700 block mb-1">Empresa (nombre completo)</label>
                   <input
                     type="text"
+                    list="assignment-companies-list"
                     value={newEmployeeData.empresa}
                     onChange={(e) => setNewEmployeeData({ ...newEmployeeData, empresa: e.target.value })}
                     placeholder="Ej. ITZ OIL & GAS"
                     className="w-full bg-white border border-gray-300 rounded-xl p-2 font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
+                  <datalist id="assignment-companies-list">
+                    {companies.map(company => <option key={company.id} value={company.nombre} />)}
+                  </datalist>
                 </div>
               </div>
             </div>
