@@ -1,5 +1,7 @@
 const express = require('express');
 const multer = require('multer');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
@@ -45,25 +47,71 @@ const normalizeHeader = (value) => value.normalize('NFD').replace(/[\u0300-\u036
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { q } = req.query;
-    let query = 'SELECT * FROM empleados WHERE estado != \'inactivo\'';
+    let query = `
+      SELECT e.*, EXISTS (
+        SELECT 1 FROM usuarios u WHERE u.empleado_id = e.id AND u.role = 'cliente' AND u.pin_hash IS NOT NULL
+      ) AS tiene_pin
+      FROM empleados e WHERE e.estado != 'inactivo'
+    `;
     let params = [];
 
     if (q) {
       query += ` AND (
-        nombre ILIKE $1 OR 
-        area ILIKE $1 OR 
-        empresa ILIKE $1 OR 
-        no_empleado ILIKE $1
+        e.nombre ILIKE $1 OR
+        e.area ILIKE $1 OR
+        e.empresa ILIKE $1 OR
+        e.no_empleado ILIKE $1
       )`;
       params.push(`%${q}%`);
     }
 
-    query += ' ORDER BY nombre ASC';
+    query += ' ORDER BY e.nombre ASC';
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener empleados:', err);
     res.status(500).json({ error: 'Error al consultar la lista de empleados' });
+  }
+});
+
+// Genera o renueva el PIN de Mesa de Ayuda directamente desde el personal.
+// La cuenta de cliente interna se crea sólo si el empleado aún no la tiene.
+router.post('/:id/generar-pin', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const employeeId = parseInt(req.params.id, 10);
+    if (!employeeId) return res.status(400).json({ error: 'Empleado inválido' });
+
+    const employeeResult = await pool.query(
+      "SELECT id, nombre, email FROM empleados WHERE id = $1 AND estado = 'activo'",
+      [employeeId]
+    );
+    if (!employeeResult.rows.length) return res.status(404).json({ error: 'Empleado no encontrado o inactivo' });
+
+    const employee = employeeResult.rows[0];
+    const pin = String(crypto.randomInt(100000, 1000000));
+    const pinHash = await bcrypt.hash(pin, 10);
+    const existing = await pool.query(
+      "SELECT id FROM usuarios WHERE empleado_id = $1 AND role = 'cliente'",
+      [employeeId]
+    );
+
+    if (existing.rows.length) {
+      await pool.query(
+        "UPDATE usuarios SET nombre = $1, email = $2, pin_hash = $3 WHERE id = $4",
+        [employee.nombre, employee.email || null, pinHash, existing.rows[0].id]
+      );
+    } else {
+      const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+      await pool.query(`
+        INSERT INTO usuarios (nombre, username, email, password_hash, role, empleado_id, pin_hash)
+        VALUES ($1, $2, $3, $4, 'cliente', $5, $6)
+      `, [employee.nombre, `cliente_${employeeId}`, employee.email || null, passwordHash, employeeId, pinHash]);
+    }
+
+    res.json({ message: 'PIN generado correctamente', pin, employee_id: employeeId });
+  } catch (err) {
+    console.error('Error al generar PIN de empleado:', err);
+    res.status(500).json({ error: 'No fue posible generar el PIN' });
   }
 });
 

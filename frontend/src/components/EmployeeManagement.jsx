@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check, Mail, Upload } from 'lucide-react';
+import { Users, Plus, Search, RefreshCw, UserCheck, Laptop, Edit3, Trash2, Building2, MapPin, X, Check, Mail, Upload, KeyRound, Copy } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function EmployeeManagement({ token }) {
@@ -22,6 +22,7 @@ export default function EmployeeManagement({ token }) {
   });
 
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState(null);
+  const [pinResult, setPinResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const csvInputRef = useRef(null);
@@ -177,6 +178,29 @@ export default function EmployeeManagement({ token }) {
     }
   };
 
+  const handleGeneratePin = async (employee) => {
+    const action = employee.tiene_pin ? 'renovar' : 'asignar';
+    if (!window.confirm(`¿Deseas ${action} el PIN de Mesa de Ayuda para ${employee.nombre}?`)) return;
+    try {
+      const res = await fetch(`/api/empleados/${employee.id}/generar-pin`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No fue posible generar el PIN');
+      setPinResult({ employee: employee.nombre, pin: data.pin });
+      fetchEmployees(search);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const copyPin = async () => {
+    try {
+      await navigator.clipboard.writeText(pinResult.pin);
+      alert('PIN copiado al portapapeles');
+    } catch { alert('No fue posible copiar el PIN'); }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Encabezado */}
@@ -291,6 +315,14 @@ export default function EmployeeManagement({ token }) {
                         >
                           <Laptop className="w-4 h-4" />
                           <span>Ver Equipos</span>
+                        </button>
+                        <button
+                          onClick={() => handleGeneratePin(emp)}
+                          className={`p-1.5 rounded-lg transition text-xs font-semibold flex items-center space-x-1 ${emp.tiene_pin ? 'text-amber-700 hover:bg-amber-100' : 'text-emerald-700 hover:bg-emerald-100'}`}
+                          title={emp.tiene_pin ? 'Renovar PIN de Mesa de Ayuda' : 'Asignar PIN de Mesa de Ayuda'}
+                        >
+                          <KeyRound className="w-4 h-4" />
+                          <span>{emp.tiene_pin ? 'Renovar PIN' : 'Asignar PIN'}</span>
                         </button>
                         <button
                           onClick={() => handleOpenEditModal(emp)}
@@ -488,6 +520,17 @@ export default function EmployeeManagement({ token }) {
             >
               Cerrar
             </button>
+          </div>
+        </div>
+      )}
+
+      {pinResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="max-w-sm w-full bg-white rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><KeyRound className="w-6 h-6" /></div>
+            <div><h3 className="text-lg font-bold text-gray-900">PIN de Mesa de Ayuda</h3><p className="text-xs text-gray-500 mt-1">Entrega este código a <strong>{pinResult.employee}</strong>. Sólo se muestra ahora.</p></div>
+            <div className="font-mono text-3xl font-black tracking-[0.3em] bg-slate-100 border border-slate-200 rounded-xl py-3 pl-[0.3em]">{pinResult.pin}</div>
+            <div className="flex gap-2"><button onClick={copyPin} className="flex-1 py-2.5 bg-indigo-50 text-indigo-700 font-bold rounded-xl text-sm flex justify-center items-center gap-1"><Copy className="w-4 h-4" />Copiar</button><button onClick={() => setPinResult(null)} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm">Listo</button></div>
           </div>
         </div>
       )}
