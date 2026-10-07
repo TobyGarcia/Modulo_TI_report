@@ -74,8 +74,8 @@ async function generarSiguienteFolio() {
   return `TCK-${anio}-${correlativo}`;
 }
 
-// 1. Crear nuevo ticket (PWA Cliente - Público o autenticado)
-router.post('/', publicTicketCreateRateLimit, async (req, res) => {
+// 1. Crear nuevo ticket desde una sesión de cliente por PIN.
+router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles('cliente'), async (req, res) => {
   try {
     const {
       equipo_id,
@@ -92,20 +92,41 @@ router.post('/', publicTicketCreateRateLimit, async (req, res) => {
       prioridad
     } = req.body;
 
-    const validationError = validatePublicTicket({ solicitante_nombre, solicitante_email, descripcion_problema, fotos_evidencia });
+    const clientEmployeeId = parseInt(req.user.empleado_id, 10);
+    if (!clientEmployeeId) return res.status(403).json({ error: 'La cuenta de cliente no está vinculada a un empleado' });
+
+    const employeeResult = await pool.query(
+      "SELECT id, nombre, email, area, empresa FROM empleados WHERE id = $1 AND estado = 'activo'",
+      [clientEmployeeId]
+    );
+    if (!employeeResult.rows.length) return res.status(403).json({ error: 'El empleado asociado no está activo' });
+    const clientEmployee = employeeResult.rows[0];
+    const validationError = validatePublicTicket({
+      solicitante_nombre: clientEmployee.nombre,
+      solicitante_email: clientEmployee.email || solicitante_email,
+      descripcion_problema,
+      fotos_evidencia
+    });
     if (validationError) return res.status(400).json({ error: validationError });
 
     // Si viene equipo_id pero faltan área/empresa, autocompletar desde el equipo
-    let eqArea = area_solicitante;
-    let eqEmpresa = empresa;
-    let eqEmpId = empleado_id;
+    let eqArea = clientEmployee.area || area_solicitante;
+    let eqEmpresa = clientEmployee.empresa || empresa;
+    let eqEmpId = clientEmployeeId;
 
+    if (!equipo_id) {
+      return res.status(400).json({ error: 'Escanea el QR de un equipo asignado antes de levantar el reporte' });
+    }
     if (equipo_id) {
       const eqCheck = await pool.query('SELECT area, empresa, empleado_id FROM equipos WHERE id = $1', [equipo_id]);
       if (eqCheck.rows.length > 0) {
+        if (eqCheck.rows[0].empleado_id !== clientEmployeeId) {
+          return res.status(403).json({ error: 'Este equipo no está asignado a tu usuario' });
+        }
         if (!eqArea) eqArea = eqCheck.rows[0].area;
         if (!eqEmpresa) eqEmpresa = eqCheck.rows[0].empresa;
-        if (!eqEmpId) eqEmpId = eqCheck.rows[0].empleado_id;
+      } else {
+        return res.status(404).json({ error: 'Equipo no encontrado' });
       }
     }
 
@@ -137,8 +158,8 @@ router.post('/', publicTicketCreateRateLimit, async (req, res) => {
       folio,
       equipo_id ? parseInt(equipo_id, 10) : null,
       eqEmpId ? parseInt(eqEmpId, 10) : null,
-      solicitante_nombre.trim(),
-      solicitante_email ? solicitante_email.trim() : null,
+      clientEmployee.nombre,
+      clientEmployee.email || (solicitante_email ? solicitante_email.trim() : null),
       solicitante_telefono ? solicitante_telefono.trim() : null,
       eqArea || 'General',
       eqEmpresa || 'ITZ OIL & GAS',
@@ -152,6 +173,10 @@ router.post('/', publicTicketCreateRateLimit, async (req, res) => {
 
     const result = await pool.query(query, values);
     const ticket = result.rows[0];
+    await pool.query(`
+      INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo)
+      SELECT id, $1, 'nuevo_ticket' FROM usuarios WHERE role = 'tecnico'
+    `, [ticket.id]);
     delete ticket.cliente_token_hash;
     res.status(201).json({
       message: 'Ticket creado exitosamente',
@@ -161,6 +186,34 @@ router.post('/', publicTicketCreateRateLimit, async (req, res) => {
   } catch (err) {
     console.error('Error al crear ticket:', err);
     res.status(500).json({ error: 'Error al registrar el ticket' });
+  }
+});
+
+// Avisos internos para la PWA técnica. El cliente no expone datos a técnicos no asignados.
+router.get('/tecnico/notificaciones', authenticateToken, authorizeRoles('tecnico'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT n.id, n.ticket_id, n.tipo, n.leida, n.created_at, t.folio, t.prioridad
+      FROM notificaciones_tickets n
+      JOIN tickets_mantenimiento t ON t.id = n.ticket_id
+      WHERE n.usuario_id = $1
+      ORDER BY n.leida ASC, n.created_at DESC
+      LIMIT 20
+    `, [req.user.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al consultar notificaciones:', err);
+    res.status(500).json({ error: 'Error al consultar notificaciones' });
+  }
+});
+
+router.put('/tecnico/notificaciones/leidas', authenticateToken, authorizeRoles('tecnico'), async (req, res) => {
+  try {
+    await pool.query('UPDATE notificaciones_tickets SET leida = TRUE WHERE usuario_id = $1 AND leida = FALSE', [req.user.id]);
+    res.json({ message: 'Notificaciones marcadas como leídas' });
+  } catch (err) {
+    console.error('Error al actualizar notificaciones:', err);
+    res.status(500).json({ error: 'Error al actualizar notificaciones' });
   }
 });
 

@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   AlertCircle, CheckCircle, Clock, Camera, Send, Search,
   QrCode, Laptop, User, Mail, Phone, Building, ArrowRight,
-  Star, ChevronRight, RefreshCw, MessageSquare, ShieldCheck, X
+  Star, ChevronRight, RefreshCw, MessageSquare, ShieldCheck, X, KeyRound, LogOut
 } from 'lucide-react';
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
 
 const CLIENT_TICKET_ACCESS_KEY = 'cliente_ticket_access';
+const CLIENT_SESSION_KEY = 'cliente_pin_session';
 
 function getStoredTicketAccess() {
   try {
@@ -25,6 +26,12 @@ function saveTicketAccess(ticket, accessToken) {
 }
 
 export default function ClientPortal({ initialEquipmentId }) {
+  const [clientSession, setClientSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CLIENT_SESSION_KEY) || 'null'); } catch { return null; }
+  });
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState(null);
+  const [pinLoading, setPinLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('reportar'); // 'reportar' | 'mis_reportes'
   const [selectedEquipo, setSelectedEquipo] = useState(null);
 
@@ -82,6 +89,41 @@ export default function ClientPortal({ initialEquipmentId }) {
     } catch (e) {}
   }, [initialEquipmentId]);
 
+  useEffect(() => {
+    if (!clientSession?.user) return;
+    setSolicitanteNombre(clientSession.user.nombre || '');
+    setSolicitanteEmail(clientSession.user.email || '');
+    setAreaSolicitante(clientSession.user.area || '');
+    setEmpresa(clientSession.user.empresa || 'ITZ OIL & GAS');
+  }, [clientSession]);
+
+  const handlePinLogin = async (event) => {
+    event.preventDefault();
+    setPinError(null);
+    setPinLoading(true);
+    try {
+      const res = await fetch('/api/auth/cliente-pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No fue posible iniciar sesión');
+      const session = { token: data.token, user: data.user };
+      localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify(session));
+      setClientSession(session);
+      setPin('');
+    } catch (err) {
+      setPinError(err.message);
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handleClientLogout = () => {
+    localStorage.removeItem(CLIENT_SESSION_KEY);
+    setClientSession(null);
+    setTicketCreado(null);
+  };
+
   // Manejar fotos cargadas desde la cámara del celular
   const handlePhotoCapture = (e) => {
     const files = Array.from(e.target.files);
@@ -113,8 +155,8 @@ export default function ClientPortal({ initialEquipmentId }) {
     setSubmitting(true);
 
     try {
-      if (!solicitanteNombre.trim() || !descripcionProblema.trim()) {
-        throw new Error('Por favor completa tu nombre y la descripción del problema');
+      if (!descripcionProblema.trim()) {
+        throw new Error('Describe el problema que presenta el equipo');
       }
 
       const payload = {
@@ -133,7 +175,7 @@ export default function ClientPortal({ initialEquipmentId }) {
 
       const res = await fetch('/api/tickets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${clientSession?.token}` },
         body: JSON.stringify(payload)
       });
 
@@ -203,6 +245,29 @@ export default function ClientPortal({ initialEquipmentId }) {
     }
   };
 
+  if (!clientSession?.token) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-sm w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-blue-300">
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-900 text-white p-6 text-center">
+            <div className="w-14 h-14 bg-white rounded-2xl p-2 mx-auto mb-3"><img src={logoITZ} alt="ITZ Logo" className="w-full h-full object-contain" /></div>
+            <h1 className="font-black text-lg">Mesa de Ayuda TI</h1>
+            <p className="text-xs text-blue-100 mt-1">Ingresa el PIN entregado por TI para reportar tu equipo.</p>
+          </div>
+          <form onSubmit={handlePinLogin} className="p-6 space-y-4">
+            {pinError && <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">{pinError}</div>}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">PIN DE CLIENTE</label>
+              <div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-600" /><input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" required autoFocus value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••••" className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-300 text-center tracking-[0.45em] font-bold outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            </div>
+            <button type="submit" disabled={pinLoading} className="w-full py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-sm shadow">{pinLoading ? 'Validando...' : 'Entrar a Mesa de Ayuda'}</button>
+            <p className="text-[11px] text-center text-slate-500">Escanea primero el QR de tu equipo para levantar el reporte.</p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-16">
       {/* Top Header Mobile Friendly */}
@@ -222,7 +287,7 @@ export default function ClientPortal({ initialEquipmentId }) {
               <p className="text-xs text-blue-200">Soporte y Mantenimiento de Equipos</p>
             </div>
           </div>
-          <button
+          <div className="flex items-center gap-2"><button
             onClick={() => {
               if (activeTab === 'reportar') {
                 setActiveTab('mis_reportes');
@@ -244,7 +309,7 @@ export default function ClientPortal({ initialEquipmentId }) {
                 <span>Nuevo Reporte</span>
               </>
             )}
-          </button>
+          </button><button onClick={handleClientLogout} title="Cerrar sesión" className="p-1.5 bg-white/15 hover:bg-red-500 rounded-lg"><LogOut className="w-4 h-4" /></button></div>
         </div>
 
         {/* Tab switcher */}
@@ -287,7 +352,7 @@ export default function ClientPortal({ initialEquipmentId }) {
                 </div>
                 <h3 className="text-lg font-extrabold text-emerald-900">¡Ticket Registrado con Éxito!</h3>
                 <p className="text-xs text-emerald-700">
-                  Tu solicitud ha sido turnada al Supervisor de TI para su aprobación y asignación técnica.
+                  Tu solicitud ya notificó al equipo técnico; el supervisor asignará la atención.
                 </p>
                 <div className="bg-white p-3 rounded-xl border border-emerald-200 inline-block font-mono font-bold text-base text-emerald-800 shadow-sm">
                   Folio: <span className="text-blue-700">{ticketCreado.folio}</span>
@@ -387,7 +452,7 @@ export default function ClientPortal({ initialEquipmentId }) {
                         type="text"
                         required
                         value={solicitanteNombre}
-                        onChange={(e) => setSolicitanteNombre(e.target.value)}
+                        readOnly
                         placeholder="ej. Juan Pérez García"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
                       />
@@ -400,7 +465,7 @@ export default function ClientPortal({ initialEquipmentId }) {
                       <input
                         type="email"
                         value={solicitanteEmail}
-                        onChange={(e) => setSolicitanteEmail(e.target.value)}
+                        readOnly
                         placeholder="juan.perez@itz.com"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
                       />
@@ -426,7 +491,7 @@ export default function ClientPortal({ initialEquipmentId }) {
                       <input
                         type="text"
                         value={areaSolicitante}
-                        onChange={(e) => setAreaSolicitante(e.target.value)}
+                        readOnly
                         placeholder="ej. Operaciones, Contabilidad"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
                       />

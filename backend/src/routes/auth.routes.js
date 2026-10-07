@@ -55,6 +55,51 @@ router.post('/login', loginRateLimit, async (req, res) => {
   }
 });
 
+// POST /api/auth/cliente-pin - acceso de empleado desde la PWA de cliente.
+// El PIN nunca se guarda ni se devuelve: sólo se compara con su hash bcrypt.
+router.post('/cliente-pin', loginRateLimit, async (req, res) => {
+  try {
+    const pin = String(req.body?.pin || '').trim();
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'Ingresa un PIN de 6 dígitos' });
+    }
+
+    const result = await pool.query(`
+      SELECT u.id, u.nombre, u.pin_hash, u.empleado_id,
+             e.nombre AS empleado_nombre, e.email, e.area, e.empresa
+      FROM usuarios u
+      JOIN empleados e ON e.id = u.empleado_id
+      WHERE u.role = 'cliente' AND u.pin_hash IS NOT NULL AND e.estado = 'activo'
+    `);
+
+    let clientUser = null;
+    for (const candidate of result.rows) {
+      if (await bcrypt.compare(pin, candidate.pin_hash)) {
+        clientUser = candidate;
+        break;
+      }
+    }
+    if (!clientUser) return res.status(401).json({ error: 'PIN inválido o cuenta de cliente inactiva' });
+
+    const payload = {
+      id: clientUser.id,
+      role: 'cliente',
+      nombre: clientUser.empleado_nombre,
+      empleado_id: clientUser.empleado_id,
+      email: clientUser.email,
+      area: clientUser.area,
+      empresa: clientUser.empresa
+    };
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: '8h', algorithm: 'HS256', issuer: 'sistema-qr', audience: 'sistema-qr-web'
+    });
+    res.json({ message: 'Acceso de cliente exitoso', token, user: payload });
+  } catch (err) {
+    console.error('Error al validar PIN de cliente:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // GET /api/auth/me - Obtener información del usuario actual
 router.get('/me', authenticateToken, (req, res) => {
   res.json({ user: req.user });

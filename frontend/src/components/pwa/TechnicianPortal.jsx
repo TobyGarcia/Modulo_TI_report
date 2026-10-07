@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Wrench, CheckCircle, Clock, AlertTriangle, User, LogOut,
   Laptop, ShieldCheck, ChevronRight, Play, CheckSquare,
-  Package, PenTool, X, Search, QrCode, Calendar
+  Package, PenTool, X, Search, QrCode, Calendar, Bell
 } from 'lucide-react';
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
 import SignatureCanvas from '../SignatureCanvas';
@@ -12,6 +12,7 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
   const [tickets, setTickets] = useState([]);
   const [insumosList, setInsumosList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState([]);
 
   // Login de técnico si no hay token
   const [username, setUsername] = useState('tecnico');
@@ -65,10 +66,28 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
     }
   };
 
+  const fetchNotifications = async () => {
+    if (!token || currentUser?.role !== 'tecnico') return;
+    try {
+      const res = await fetch('/api/tickets/tecnico/notificaciones', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setNotifications(await res.json());
+    } catch (err) { console.warn('Error al cargar notificaciones:', err); }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await fetch('/api/tickets/tecnico/notificaciones/leidas', { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+      setNotifications((items) => items.map((item) => ({ ...item, leida: true })));
+    } catch (err) { console.warn('Error al marcar notificaciones:', err); }
+  };
+
   useEffect(() => {
     if (token) {
       fetchMisTickets();
       fetchInsumos();
+      fetchNotifications();
+      const timer = window.setInterval(fetchNotifications, 30000);
+      return () => window.clearInterval(timer);
     }
   }, [token]);
 
@@ -263,6 +282,12 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
           </div>
 
           <div className="flex items-center gap-2">
+            {notifications.filter((item) => !item.leida).length > 0 && (
+              <button onClick={markNotificationsRead} className="relative p-1.5 bg-red-500/90 hover:bg-red-600 rounded-lg transition" title="Nuevos reportes de clientes">
+                <Bell className="w-4 h-4" />
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-white text-red-700 rounded-full text-[9px] leading-4 font-black">{notifications.filter((item) => !item.leida).length}</span>
+              </button>
+            )}
             <button
               onClick={() => fetchMisTickets()}
               className="p-1.5 bg-white/15 hover:bg-white/25 rounded-lg transition"

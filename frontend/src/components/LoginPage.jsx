@@ -120,6 +120,20 @@ export default function LoginPage({ onLoginSuccess, isScanAccess }) {
               </>
             )}
           </button>
+
+          <div className="pt-1 border-t border-gray-100 text-center">
+            <p className="text-[11px] text-gray-500 mb-2">¿Eres cliente y quieres reportar una falla?</p>
+            <button
+              type="button"
+              onClick={() => {
+                const equipmentId = isScanAccess ? window.location.pathname.replace(/^\/scan\//i, '') : '';
+                window.location.href = equipmentId ? `/cliente?equipo=${encodeURIComponent(equipmentId)}` : '/cliente';
+              }}
+              className="text-xs font-bold text-blue-700 hover:text-blue-900 underline"
+            >
+              Entrar con PIN de cliente
+            </button>
+          </div>
         </form>
       </div>
     </div>

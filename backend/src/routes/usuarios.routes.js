@@ -1,9 +1,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
+
+function createClientPin() {
+  return String(crypto.randomInt(100000, 1000000));
+}
 
 // Todas las rutas de usuarios requieren autenticación previa
 router.use(authenticateToken);
@@ -28,7 +33,9 @@ router.use(authorizeRoles('admin'));
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nombre, username, email, role, created_at FROM usuarios ORDER BY id ASC'
+      `SELECT u.id, u.nombre, u.username, u.email, u.role, u.empleado_id, u.created_at,
+              e.nombre AS empleado_nombre, (u.pin_hash IS NOT NULL) AS tiene_pin
+       FROM usuarios u LEFT JOIN empleados e ON e.id = u.empleado_id ORDER BY u.id ASC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -40,7 +47,30 @@ router.get('/', async (req, res) => {
 // Crear un nuevo usuario con contraseña encriptada en bcrypt
 router.post('/', async (req, res) => {
   try {
-    const { nombre, username, email, password, role } = req.body;
+    const { nombre, username, email, password, role, empleado_id, pin } = req.body;
+
+    const allowedRoles = ['admin', 'supervisor', 'tecnico', 'cliente'];
+    const selectedRole = allowedRoles.includes(role) ? role : 'tecnico';
+
+    if (selectedRole === 'cliente') {
+      const employeeId = parseInt(empleado_id, 10);
+      if (!employeeId) return res.status(400).json({ error: 'Selecciona el empleado para la cuenta de cliente' });
+      const employee = await pool.query("SELECT id, nombre, email FROM empleados WHERE id = $1 AND estado = 'activo'", [employeeId]);
+      if (!employee.rows.length) return res.status(400).json({ error: 'El empleado seleccionado no está activo' });
+      const existingClient = await pool.query("SELECT id FROM usuarios WHERE empleado_id = $1 AND role = 'cliente'", [employeeId]);
+      if (existingClient.rows.length) return res.status(400).json({ error: 'Ese empleado ya tiene una cuenta de cliente' });
+
+      const generatedPin = /^\d{6}$/.test(String(pin || '')) ? String(pin) : createClientPin();
+      const pinHash = await bcrypt.hash(generatedPin, 10);
+      const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+      const clientUsername = `cliente_${employeeId}`;
+      const result = await pool.query(`
+        INSERT INTO usuarios (nombre, username, email, password_hash, role, empleado_id, pin_hash)
+        VALUES ($1, $2, $3, $4, 'cliente', $5, $6)
+        RETURNING id, nombre, username, email, role, empleado_id, created_at
+      `, [employee.rows[0].nombre, clientUsername, employee.rows[0].email, passwordHash, employeeId, pinHash]);
+      return res.status(201).json({ ...result.rows[0], generated_pin: generatedPin });
+    }
 
     if (!nombre || !username || !password) {
       return res.status(400).json({ error: 'Nombre, usuario y contraseña son requeridos' });
@@ -61,8 +91,6 @@ router.post('/', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, nombre, username, email, role, created_at;
     `;
-    const allowedRoles = ['admin', 'supervisor', 'tecnico'];
-    const selectedRole = allowedRoles.includes(role) ? role : 'tecnico';
     const values = [nombre.trim(), username.trim(), email ? email.trim() : null, passwordHash, selectedRole];
 
     const result = await pool.query(query, values);
@@ -73,17 +101,33 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Regenera un PIN y lo muestra una sola vez a quien lo administra.
+router.post('/:id/generar-pin', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const user = await pool.query("SELECT id FROM usuarios WHERE id = $1 AND role = 'cliente'", [id]);
+    if (!user.rows.length) return res.status(404).json({ error: 'Cuenta de cliente no encontrada' });
+    const generatedPin = createClientPin();
+    const pinHash = await bcrypt.hash(generatedPin, 10);
+    await pool.query('UPDATE usuarios SET pin_hash = $1 WHERE id = $2', [pinHash, id]);
+    res.json({ message: 'PIN generado correctamente', generated_pin: generatedPin });
+  } catch (err) {
+    console.error('Error al generar PIN:', err);
+    res.status(500).json({ error: 'No fue posible generar el PIN' });
+  }
+});
+
 // Editar usuario
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, username, email, password, role } = req.body;
+    const { nombre, username, email, password, role, empleado_id } = req.body;
 
     if (!nombre || !username) {
       return res.status(400).json({ error: 'Nombre y usuario son requeridos' });
     }
 
-    const allowedRoles = ['admin', 'supervisor', 'tecnico'];
+    const allowedRoles = ['admin', 'supervisor', 'tecnico', 'cliente'];
     const selectedRole = allowedRoles.includes(role) ? role : null;
     let passwordHash = null;
     if (password && password.trim() !== '') {

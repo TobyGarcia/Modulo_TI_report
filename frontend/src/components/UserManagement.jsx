@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Shield, X, Save, AlertCircle, Mail, Edit3 } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, X, Save, AlertCircle, Mail, Edit3, KeyRound } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function UserManagement({ token, currentUser }) {
   const [users, setUsers] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -16,7 +17,8 @@ export default function UserManagement({ token, currentUser }) {
     username: '',
     email: '',
     password: '',
-    role: 'admin'
+    role: 'tecnico',
+    empleado_id: ''
   });
 
   const fetchUsers = async () => {
@@ -38,6 +40,10 @@ export default function UserManagement({ token, currentUser }) {
 
   useEffect(() => {
     fetchUsers();
+    fetch('/api/empleados', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch(() => setEmployees([]));
   }, []);
 
   const totalPages = Math.ceil(users.length / pageSize) || 1;
@@ -50,7 +56,8 @@ export default function UserManagement({ token, currentUser }) {
       username: '',
       email: '',
       password: '',
-      role: 'admin'
+      role: 'tecnico',
+      empleado_id: ''
     });
     setError(null);
     setIsModalOpen(true);
@@ -63,7 +70,8 @@ export default function UserManagement({ token, currentUser }) {
       username: u.username || '',
       email: u.email || '',
       password: '',
-      role: u.role || 'admin'
+      role: u.role || 'tecnico',
+      empleado_id: u.empleado_id || ''
     });
     setError(null);
     setIsModalOpen(true);
@@ -91,10 +99,25 @@ export default function UserManagement({ token, currentUser }) {
 
       setIsModalOpen(false);
       setEditingUser(null);
+      if (data.generated_pin) {
+        window.alert(`Cuenta de cliente creada. Entrega este PIN de 6 dígitos al empleado: ${data.generated_pin}`);
+      }
       fetchUsers();
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleGeneratePin = async (user) => {
+    try {
+      const res = await fetch(`/api/usuarios/${user.id}/generar-pin`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No fue posible generar el PIN');
+      window.alert(`Nuevo PIN para ${user.empleado_nombre || user.nombre}: ${data.generated_pin}\nCompártelo de forma segura; no se volverá a mostrar.`);
+      fetchUsers();
+    } catch (err) { window.alert(err.message); }
   };
 
   const handleDeleteUser = async (id, username) => {
@@ -121,9 +144,9 @@ export default function UserManagement({ token, currentUser }) {
             <Users className="w-6 h-6 text-[#c68a1d]" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios TI</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios y Clientes</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Administración de cuentas autenticadas, roles y correos electrónicos M365.
+              Cuentas de TI y clientes con PIN vinculados a los equipos asignados.
             </p>
           </div>
         </div>
@@ -158,7 +181,7 @@ export default function UserManagement({ token, currentUser }) {
                 <tr>
                   <th className="p-4">ID</th>
                   <th className="p-4">Nombre Completo</th>
-                  <th className="p-4">Usuario</th>
+                  <th className="p-4">Usuario / Empleado</th>
                   <th className="p-4">Email (M365 / Corporativo)</th>
                   <th className="p-4">Rol</th>
                   <th className="p-4">Fecha Registro</th>
@@ -170,7 +193,7 @@ export default function UserManagement({ token, currentUser }) {
                   <tr key={u.id} className="hover:bg-amber-50/40 transition">
                     <td className="p-4 font-mono text-gray-400 font-bold">#{u.id}</td>
                     <td className="p-4 font-semibold text-gray-900">{u.nombre}</td>
-                    <td className="p-4 font-mono font-bold text-black">{u.username}</td>
+                    <td className="p-4 font-mono font-bold text-black">{u.role === 'cliente' ? (u.empleado_nombre || 'Cliente') : u.username}</td>
                     <td className="p-4">
                       {u.email ? (
                         <div className="flex items-center space-x-1.5 text-xs text-indigo-900 font-mono font-medium">
@@ -199,6 +222,11 @@ export default function UserManagement({ token, currentUser }) {
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
+                        {u.role === 'cliente' && (
+                          <button onClick={() => handleGeneratePin(u)} className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition" title="Generar nuevo PIN">
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                        )}
                         {currentUser?.id !== u.id ? (
                           <button
                             onClick={() => handleDeleteUser(u.id, u.username)}
@@ -244,7 +272,7 @@ export default function UserManagement({ token, currentUser }) {
             </div>
 
             <form onSubmit={handleSaveUser} className="p-6 space-y-4">
-              <div>
+              {formData.role !== 'cliente' && <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre Completo *</label>
                 <input
                   type="text"
@@ -254,9 +282,9 @@ export default function UserManagement({ token, currentUser }) {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="ej. Carlos Pérez"
                 />
-              </div>
+              </div>}
 
-              <div>
+              {formData.role !== 'cliente' && <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre de Usuario (Username) *</label>
                 <input
                   type="text"
@@ -266,9 +294,9 @@ export default function UserManagement({ token, currentUser }) {
                   className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="ej. cperez"
                 />
-              </div>
+              </div>}
 
-              <div>
+              {formData.role !== 'cliente' && <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Email / Correo M365 (Opcional)</label>
                 <input
                   type="email"
@@ -277,9 +305,9 @@ export default function UserManagement({ token, currentUser }) {
                   className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="ej. cperez@itz.com.mx"
                 />
-              </div>
+              </div>}
 
-              <div>
+              {formData.role !== 'cliente' && <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   {editingUser ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña *'}
                 </label>
@@ -291,7 +319,7 @@ export default function UserManagement({ token, currentUser }) {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="••••••••"
                 />
-              </div>
+              </div>}
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Rol de Usuario</label>
@@ -301,9 +329,22 @@ export default function UserManagement({ token, currentUser }) {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
                   <option value="admin">Administrador (Acceso Completo)</option>
-                  <option value="operador">Operador</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="tecnico">Técnico</option>
+                  <option value="cliente">Cliente (acceso por PIN)</option>
                 </select>
               </div>
+
+              {formData.role === 'cliente' && (
+                <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <label className="block text-xs font-semibold text-blue-950">Empleado asociado *</label>
+                  <select required disabled={Boolean(editingUser)} value={formData.empleado_id} onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100">
+                    <option value="">Selecciona un empleado...</option>
+                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombre} · {employee.area || 'General'}</option>)}
+                  </select>
+                  <p className="text-[11px] text-blue-800">{editingUser ? 'Usa el icono de llave en la lista para generar un nuevo PIN.' : 'Se generará un PIN único de 6 dígitos, asociado a los equipos que tenga asignados este empleado.'}</p>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
