@@ -15,6 +15,7 @@ export default function EquipmentList({
 }) {
   const [equipments, setEquipments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [qrModalEquipo, setQrModalEquipo] = useState(null);
@@ -195,6 +196,35 @@ export default function EquipmentList({
     onPrintLabelsClick(selectedList, effectiveBaseUrl);
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('/api/equipos/export', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'No fue posible generar el archivo de Excel');
+      }
+
+      const blob = await response.blob();
+      const fileName = response.headers.get('content-disposition')
+        ?.match(/filename="?([^";]+)"?/i)?.[1] || 'inventario-qr.xlsx';
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Encabezado e Inicios de Acción */}
@@ -210,6 +240,18 @@ export default function EquipmentList({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && (
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Genera un archivo con una hoja por categoría"
+            >
+              <Download className="w-4 h-4" />
+              <span>{exporting ? 'Generando Excel...' : 'Exportar Excel'}</span>
+            </button>
+          )}
+
           <button
             onClick={onImportClick}
             className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition shadow-sm"

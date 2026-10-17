@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const pool = require('../config/db');
-const { parseExcelBuffer } = require('../services/excel.service');
+const { parseExcelBuffer, buildInventoryWorkbook } = require('../services/excel.service');
 const { generateQRDataUrl, getLocalIpAddress } = require('../services/qr.service');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 const { saveDetail, quoteIdentifier, tableName } = require('../services/category-schema.service');
@@ -57,6 +57,59 @@ const upload = multer({
 router.get('/info/network-ip', authenticateToken, (req, res) => {
   const localIp = getLocalIpAddress();
   res.json({ ip: localIp, port: 5173 });
+});
+
+// Exportar el inventario activo, organizado en una hoja por categoría.
+// Se consulta la definición de atributos para que las categorías creadas desde
+// Catálogos también se reflejen sin requerir cambios de código.
+router.get('/export', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
+  try {
+    const tiposResult = await pool.query('SELECT id, nombre FROM tipos_equipo ORDER BY nombre ASC');
+    const categories = [];
+
+    for (const tipo of tiposResult.rows) {
+      const attributesResult = await pool.query(
+        'SELECT nombre, clave FROM atributos_tipo_equipo WHERE tipo_equipo_id = $1 ORDER BY orden, id',
+        [tipo.id]
+      );
+      const attributes = attributesResult.rows;
+      const detailColumns = attributes.map(attribute =>
+        `d.${quoteIdentifier(attribute.clave)} AS ${quoteIdentifier(`detail__${attribute.clave}`)}`
+      );
+      const detailSelect = detailColumns.length ? `, ${detailColumns.join(', ')}` : '';
+      const detailJoin = attributes.length
+        ? `LEFT JOIN ${quoteIdentifier(tableName(tipo.id))} d ON d.equipo_id = e.id`
+        : '';
+      const records = await pool.query(`
+        SELECT e.id, e.item, e.empresa, e.ciudad, e.area, e.hostname, e.marca,
+               e.modelo, e.serial, e.so, e.cpu, e.ram_capacidad, e.disco_capacidad,
+               e.gpu_tipo, e.gpu_modelo, e.mac_wifi, e.estado_fisico,
+               e.uso_recomendado, e.observaciones, e.created_at, e.updated_at,
+               COALESCE(NULLIF(TRIM(e.personal_asignado), ''), emp.nombre, 'Sin asignar') AS responsable,
+               emp.no_empleado, emp.puesto, COALESCE(st.nombre, 'Sin estado') AS estado_nombre
+               ${detailSelect}
+        FROM equipos e
+        LEFT JOIN empleados emp ON e.empleado_id = emp.id
+        LEFT JOIN estados_equipo st ON e.estado_id = st.id
+        ${detailJoin}
+        WHERE e.tipo_equipo_id = $1 AND (e.estado_id IS NULL OR e.estado_id != 4)
+        ORDER BY e.item NULLS LAST, e.id ASC
+      `, [tipo.id]);
+      categories.push({ ...tipo, attributes, rows: records.rows });
+    }
+
+    const file = buildInventoryWorkbook(categories);
+    const date = new Date().toISOString().slice(0, 10);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="inventario-qr-${date}.xlsx"`,
+      'Content-Length': file.length
+    });
+    res.send(file);
+  } catch (err) {
+    console.error('Error al exportar el inventario a Excel:', err);
+    res.status(500).json({ error: 'No fue posible generar el archivo de Excel' });
+  }
 });
 
 // Datos mínimos para que un empleado pueda reportar una falla al escanear
