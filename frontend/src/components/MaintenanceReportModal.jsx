@@ -101,7 +101,8 @@ export default function MaintenanceReportModal({
     if (!isOpen) return;
 
     const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
-    fetch('/api/insumos', { headers: { Authorization: `Bearer ${token}` } })
+    const centroStock = String(equipment?.ciudad || '').toUpperCase().includes('YL') ? 'YL' : 'PERU';
+    fetch(`/api/insumos?centro_stock_id=${centroStock}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(data => Array.isArray(data) && setCatalogInsumos(data))
       .catch(err => console.error('Error al cargar catálogo de insumos:', err));

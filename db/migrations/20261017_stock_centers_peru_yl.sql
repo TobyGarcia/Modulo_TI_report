@@ -33,11 +33,16 @@ SELECT id, 'PERU', COALESCE(stock_actual, 0), COALESCE(stock_minimo, 1)
 FROM insumos
 ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING;
 
-INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
-SELECT id, 'YL', 0, COALESCE(stock_minimo, 1)
-FROM insumos
-ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING;
-
 -- Los movimientos históricos no tenían base: se marcan Perú únicamente como
 -- origen de migración para mantener la bitácora consultable.
 UPDATE movimientos_insumos SET centro_stock_id = 'PERU' WHERE centro_stock_id IS NULL;
+
+-- Corrige instalaciones que ejecutaron una versión previa de esta migración:
+-- elimina sólo filas YL en cero que nunca tuvieron un movimiento; esos
+-- materiales no pertenecen realmente a Base YL.
+DELETE FROM stock_insumos_centros s
+WHERE s.centro_stock_id = 'YL' AND s.stock_actual = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM movimientos_insumos m
+    WHERE m.insumo_id = s.insumo_id AND m.centro_stock_id = 'YL'
+  );

@@ -30,7 +30,7 @@ router.get('/', authenticateToken, async (req, res) => {
         $1 AS centro_stock_id,
         CASE WHEN COALESCE(s.stock_actual, 0) <= COALESCE(s.stock_minimo, i.stock_minimo) THEN true ELSE false END as es_bajo_stock
       FROM insumos i
-      LEFT JOIN stock_insumos_centros s ON s.insumo_id = i.id AND s.centro_stock_id = $1
+      JOIN stock_insumos_centros s ON s.insumo_id = i.id AND s.centro_stock_id = $1
       WHERE i.estado = 'activo'
     `;
     const params = [centro];
@@ -143,10 +143,6 @@ router.post('/', authenticateToken, async (req, res) => {
       await client.query(`INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
         VALUES ($1, $2, 0, $3)`, [nuevoInsumo.id, centro, parseFloat(stock_minimo) || 1]);
     }
-    const otroCentro = centro === 'PERU' ? 'YL' : 'PERU';
-    await client.query(`INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
-      VALUES ($1, $2, 0, $3) ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING`,
-      [nuevoInsumo.id, otroCentro, parseFloat(stock_minimo) || 1]);
     await client.query('COMMIT');
     res.status(201).json(nuevoInsumo);
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }

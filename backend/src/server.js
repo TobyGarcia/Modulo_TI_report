@@ -532,9 +532,6 @@ async function initDatabase() {
       INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
       SELECT id, 'PERU', COALESCE(stock_actual, 0), COALESCE(stock_minimo, 1) FROM insumos
       ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING;
-      INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
-      SELECT id, 'YL', 0, COALESCE(stock_minimo, 1) FROM insumos
-      ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING;
     `);
 
     // 6.5. Limpieza de duplicados en la tabla empleados

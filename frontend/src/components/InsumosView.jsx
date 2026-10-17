@@ -582,7 +582,7 @@ export default function InsumosView({ token: tokenProp, user }) {
                   ) : insumos.length === 0 ? (
                     <tr>
                       <td colSpan="9" className="text-center py-8 text-neutral-500">
-                        No se encontraron insumos o materiales en el inventario.
+                        No se encontraron insumos con stock registrado en {centroStock === 'PERU' ? 'Base Perú' : 'Base YL'}.
                       </td>
                     </tr>
                   ) : (
