@@ -58,6 +58,7 @@ export default function InsumosView({ token: tokenProp, user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoriaFilter, setCategoriaFilter] = useState('');
   const [solobajoStock, setSoloBajoStock] = useState(false);
+  const [centroStock, setCentroStock] = useState('PERU');
 
   // Estados de Modales
   const [showInsumoModal, setShowInsumoModal] = useState(false);
@@ -114,6 +115,7 @@ export default function InsumosView({ token: tokenProp, user }) {
       if (searchQuery) queryParams.append('q', searchQuery);
       if (categoriaFilter) queryParams.append('categoria', categoriaFilter);
       if (solobajoStock) queryParams.append('bajo_stock', 'true');
+      queryParams.append('centro_stock_id', centroStock);
 
       const res = await fetch(`/api/insumos?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -189,7 +191,7 @@ export default function InsumosView({ token: tokenProp, user }) {
 
   useEffect(() => {
     fetchInsumos();
-  }, [searchQuery, categoriaFilter, solobajoStock]);
+  }, [searchQuery, categoriaFilter, solobajoStock, centroStock]);
 
   useEffect(() => {
     if (activeTab === 'recetas') fetchRecetas();
@@ -253,7 +255,7 @@ export default function InsumosView({ token: tokenProp, user }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(insumoForm)
+        body: JSON.stringify({ ...insumoForm, centro_stock_id: centroStock })
       });
 
       if (res.ok) {
@@ -304,7 +306,7 @@ export default function InsumosView({ token: tokenProp, user }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(reabastecerForm)
+        body: JSON.stringify({ ...reabastecerForm, centro_stock_id: centroStock })
       });
 
       if (res.ok) {
@@ -525,6 +527,12 @@ export default function InsumosView({ token: tokenProp, user }) {
                 ))}
               </select>
 
+              <select value={centroStock} onChange={(e) => setCentroStock(e.target.value)}
+                className="bg-neutral-950 text-neutral-300 text-xs px-3 py-2.5 rounded-lg border border-neutral-800 focus:outline-none focus:border-amber-500">
+                <option value="PERU">Base Perú</option>
+                <option value="YL">Base YL</option>
+              </select>
+
               <button
                 onClick={() => setSoloBajoStock(!solobajoStock)}
                 className={`flex items-center space-x-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold border transition ${
@@ -558,7 +566,7 @@ export default function InsumosView({ token: tokenProp, user }) {
                     <th className="px-4 py-3.5">Categoría</th>
                     <th className="px-4 py-3.5">Medida</th>
                     <th className="px-4 py-3.5 text-center">Presentación</th>
-                    <th className="px-4 py-3.5 text-center">Stock Actual</th>
+                    <th className="px-4 py-3.5 text-center">Stock {centroStock === 'PERU' ? 'Base Perú' : 'Base YL'}</th>
                     <th className="px-4 py-3.5 text-center">Stock Mín.</th>
                     <th className="px-4 py-3.5 text-center">Estado Stock</th>
                     <th className="px-4 py-3.5 text-right">Acciones</th>

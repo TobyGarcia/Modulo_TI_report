@@ -6,6 +6,11 @@ const { createRateLimiter } = require('../middleware/security.middleware');
 
 const router = express.Router();
 
+async function getStockCenterForEquipment(client, equipoId) {
+  const result = await client.query('SELECT ciudad FROM equipos WHERE id = $1', [equipoId]);
+  return String(result.rows[0]?.ciudad || '').toUpperCase().includes('YL') ? 'YL' : 'PERU';
+}
+
 const publicTicketCreateRateLimit = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 8,
@@ -657,6 +662,7 @@ router.post('/:id/resolver', authenticateToken, authorizeRoles('admin', 'supervi
 
       // Descontar insumos del catálogo si se enviaron
       if (Array.isArray(insumos_consumidos) && insumos_consumidos.length > 0) {
+        const centroStockId = await getStockCenterForEquipment(client, ticket.equipo_id);
         for (const item of insumos_consumidos) {
           if (item.insumo_id && Number(item.cantidad) > 0) {
             await client.query(`
@@ -665,15 +671,15 @@ router.post('/:id/resolver', authenticateToken, authorizeRoles('admin', 'supervi
             `, [mantenimientoId, item.insumo_id, Number(item.cantidad)]);
 
             await client.query(`
-              UPDATE insumos 
-              SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP
-              WHERE id = $2;
-            `, [Number(item.cantidad), item.insumo_id]);
+              UPDATE stock_insumos_centros
+              SET stock_actual = GREATEST(0, stock_actual - $1), updated_at = CURRENT_TIMESTAMP
+              WHERE insumo_id = $2 AND centro_stock_id = $3;
+            `, [Number(item.cantidad), item.insumo_id, centroStockId]);
 
             await client.query(`
-              INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
-              VALUES ($1, 'salida_mantenimiento', $2, $3, $4, $5);
-            `, [item.insumo_id, Number(item.cantidad), mantenimientoId, req.user.id, `Consumo por Ticket ${ticket.folio}`]);
+              INSERT INTO movimientos_insumos (insumo_id, centro_stock_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
+              VALUES ($1, $2, 'salida_mantenimiento', $3, $4, $5, $6);
+            `, [item.insumo_id, centroStockId, Number(item.cantidad), mantenimientoId, req.user.id, `Consumo por Ticket ${ticket.folio}`]);
           }
         }
       }

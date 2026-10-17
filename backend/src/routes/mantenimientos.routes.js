@@ -4,6 +4,12 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+async function getStockCenterForEquipment(equipoId) {
+  const result = await pool.query('SELECT ciudad FROM equipos WHERE id = $1', [equipoId]);
+  const ciudad = String(result.rows[0]?.ciudad || '').toUpperCase();
+  return ciudad.includes('YL') ? 'YL' : 'PERU';
+}
+
 // Helper para calcular la siguiente fecha a 6 meses dentro del rango de Lunes a Sábado
 function calcularProximaFecha6Meses(fechaBase) {
   const d = new Date(fechaBase || Date.now());
@@ -359,6 +365,7 @@ router.post('/reporte', authenticateToken, async (req, res) => {
     // --- Procesar insumos_usados y descontar inventario ---
     const { insumos_usados } = req.body;
     if (Array.isArray(insumos_usados) && insumos_usados.length > 0) {
+      const centroStockId = await getStockCenterForEquipment(equipo_id);
       for (const item of insumos_usados) {
         const insumoId = parseInt(item.insumo_id, 10);
         const cant = parseFloat(item.cantidad);
@@ -370,20 +377,21 @@ router.post('/reporte', authenticateToken, async (req, res) => {
               VALUES ($1, $2, $3)
             `, [reportRecord.id, insumoId, cant]);
 
-            // Descontar de la existencia en insumos
+            // Descontar exclusivamente del centro correspondiente al equipo.
             await pool.query(`
-              UPDATE insumos
+              UPDATE stock_insumos_centros
               SET stock_actual = GREATEST(0, stock_actual - $1),
                   updated_at = CURRENT_TIMESTAMP
-              WHERE id = $2
-            `, [cant, insumoId]);
+              WHERE insumo_id = $2 AND centro_stock_id = $3
+            `, [cant, insumoId, centroStockId]);
 
             // Registrar movimiento de inventario
             await pool.query(`
-              INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
-              VALUES ($1, 'salida_mantenimiento', $2, $3, $4, $5)
+              INSERT INTO movimientos_insumos (insumo_id, centro_stock_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
+              VALUES ($1, $2, 'salida_mantenimiento', $3, $4, $5, $6)
             `, [
               insumoId,
+              centroStockId,
               cant,
               reportRecord.id,
               req.user ? req.user.id : null,
@@ -528,6 +536,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { insumos_usados } = req.body;
 
     if (Array.isArray(insumos_usados) && insumos_usados.length > 0) {
+      const centroStockId = await getStockCenterForEquipment(updatedMaint.equipo_id);
       await pool.query('DELETE FROM mantenimiento_insumos WHERE mantenimiento_id = $1', [updatedMaint.id]);
 
       for (const item of insumos_usados) {
@@ -541,17 +550,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
             `, [updatedMaint.id, insumoId, cant]);
 
             await pool.query(`
-              UPDATE insumos
+              UPDATE stock_insumos_centros
               SET stock_actual = GREATEST(0, stock_actual - $1),
                   updated_at = CURRENT_TIMESTAMP
-              WHERE id = $2
-            `, [cant, insumoId]);
+              WHERE insumo_id = $2 AND centro_stock_id = $3
+            `, [cant, insumoId, centroStockId]);
 
             await pool.query(`
-              INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
-              VALUES ($1, 'salida_mantenimiento', $2, $3, $4, $5)
+              INSERT INTO movimientos_insumos (insumo_id, centro_stock_id, tipo_movimiento, cantidad, mantenimiento_id, usuario_id, motivo)
+              VALUES ($1, $2, 'salida_mantenimiento', $3, $4, $5, $6)
             `, [
               insumoId,
+              centroStockId,
               cant,
               updatedMaint.id,
               req.user ? req.user.id : null,

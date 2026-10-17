@@ -3,6 +3,8 @@ const pool = require('../config/db');
 const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
+const STOCK_CENTERS = new Set(['PERU', 'YL']);
+const normalizeCenter = (value) => STOCK_CENTERS.has(String(value || '').toUpperCase()) ? String(value).toUpperCase() : 'PERU';
 
 // Helper para generar código automático de insumo si no viene especificado
 async function generarCodigoInsumo() {
@@ -18,16 +20,21 @@ async function generarCodigoInsumo() {
 // Listar insumos con opciones de filtro
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { q, categoria, bajo_stock } = req.query;
+    const { q, categoria, bajo_stock, centro_stock_id } = req.query;
+    const centro = normalizeCenter(centro_stock_id);
     let query = `
       SELECT 
         i.*,
-        CASE WHEN i.stock_actual <= i.stock_minimo THEN true ELSE false END as es_bajo_stock
+        COALESCE(s.stock_actual, 0) AS stock_actual,
+        COALESCE(s.stock_minimo, i.stock_minimo) AS stock_minimo,
+        $1 AS centro_stock_id,
+        CASE WHEN COALESCE(s.stock_actual, 0) <= COALESCE(s.stock_minimo, i.stock_minimo) THEN true ELSE false END as es_bajo_stock
       FROM insumos i
+      LEFT JOIN stock_insumos_centros s ON s.insumo_id = i.id AND s.centro_stock_id = $1
       WHERE i.estado = 'activo'
     `;
-    const params = [];
-    let paramIdx = 1;
+    const params = [centro];
+    let paramIdx = 2;
 
     if (categoria) {
       query += ` AND i.categoria = $${paramIdx++}`;
@@ -35,7 +42,7 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 
     if (bajo_stock === 'true') {
-      query += ` AND i.stock_actual <= i.stock_minimo`;
+      query += ` AND COALESCE(s.stock_actual, 0) <= COALESCE(s.stock_minimo, i.stock_minimo)`;
     }
 
     if (q) {
@@ -57,6 +64,11 @@ router.get('/', authenticateToken, async (req, res) => {
     console.error('Error al obtener insumos:', err);
     res.status(500).json({ error: 'Error al consultar catálogo de insumos' });
   }
+});
+
+router.get('/centros', authenticateToken, async (req, res) => {
+  const result = await pool.query("SELECT id, nombre FROM centros_stock WHERE activo = TRUE ORDER BY id");
+  res.json(result.rows);
 });
 
 // Obtener insumo individual por ID
@@ -85,7 +97,7 @@ router.post('/', authenticateToken, async (req, res) => {
       unidad_medida,
       presentacion,
       stock_actual,
-      stock_minimo
+      stock_minimo, centro_stock_id
     } = req.body;
 
     if (!nombre) {
@@ -95,6 +107,10 @@ router.post('/', authenticateToken, async (req, res) => {
     const codInsumo = codigo || (await generarCodigoInsumo());
     const stockInicial = parseFloat(stock_actual) || 0;
 
+    const centro = normalizeCenter(centro_stock_id);
+    const client = await pool.connect();
+    try {
+    await client.query('BEGIN');
     const query = `
       INSERT INTO insumos (
         codigo, nombre, descripcion, categoria,
@@ -114,18 +130,26 @@ router.post('/', authenticateToken, async (req, res) => {
       parseFloat(stock_minimo) || 1.00
     ];
 
-    const result = await pool.query(query, values);
+    const result = await client.query(query, values);
     const nuevoInsumo = result.rows[0];
 
     // Si inició con stock > 0, registrar movimiento de inventario inicial
     if (stockInicial > 0) {
-      await pool.query(`
-        INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, usuario_id, motivo)
-        VALUES ($1, 'entrada', $2, $3, 'Inventario inicial registrado')
-      `, [nuevoInsumo.id, stockInicial, req.user.id]);
+      await client.query(`INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
+        VALUES ($1, $2, $3, $4)`, [nuevoInsumo.id, centro, stockInicial, parseFloat(stock_minimo) || 1]);
+      await client.query(`INSERT INTO movimientos_insumos (insumo_id, centro_stock_id, tipo_movimiento, cantidad, usuario_id, motivo)
+        VALUES ($1, $2, 'entrada', $3, $4, 'Inventario inicial registrado')`, [nuevoInsumo.id, centro, stockInicial, req.user.id]);
+    } else {
+      await client.query(`INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
+        VALUES ($1, $2, 0, $3)`, [nuevoInsumo.id, centro, parseFloat(stock_minimo) || 1]);
     }
-
+    const otroCentro = centro === 'PERU' ? 'YL' : 'PERU';
+    await client.query(`INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
+      VALUES ($1, $2, 0, $3) ON CONFLICT (insumo_id, centro_stock_id) DO NOTHING`,
+      [nuevoInsumo.id, otroCentro, parseFloat(stock_minimo) || 1]);
+    await client.query('COMMIT');
     res.status(201).json(nuevoInsumo);
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   } catch (err) {
     console.error('Error al crear insumo:', err);
     if (err.code === '23505') {
@@ -148,7 +172,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       presentacion,
       stock_actual,
       stock_minimo,
-      estado
+      estado, centro_stock_id
     } = req.body;
 
     const query = `
@@ -184,6 +208,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Insumo no encontrado' });
     }
+    const centro = normalizeCenter(centro_stock_id);
+    await pool.query(`
+      INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (insumo_id, centro_stock_id) DO UPDATE
+      SET stock_actual = EXCLUDED.stock_actual, stock_minimo = EXCLUDED.stock_minimo, updated_at = CURRENT_TIMESTAMP
+    `, [parseInt(id, 10), centro, parseFloat(stock_actual) || 0, parseFloat(stock_minimo) || 1]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Error al actualizar insumo:', err);
@@ -211,8 +242,9 @@ router.post('/:id/reabastecer', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { cantidad, motivo } = req.body;
+    const { cantidad, motivo, centro_stock_id } = req.body;
     const qty = parseFloat(cantidad);
+    const centro = normalizeCenter(centro_stock_id);
 
     if (isNaN(qty) || qty <= 0) {
       return res.status(400).json({ error: 'La cantidad a reabastecer debe ser un número mayor a cero' });
@@ -222,12 +254,13 @@ router.post('/:id/reabastecer', authenticateToken, async (req, res) => {
 
     // Aumentar el stock actual
     const updateRes = await client.query(`
-      UPDATE insumos
-      SET stock_actual = stock_actual + $1,
+      INSERT INTO stock_insumos_centros (insumo_id, centro_stock_id, stock_actual, stock_minimo)
+      VALUES ($2, $3, $1, 1)
+      ON CONFLICT (insumo_id, centro_stock_id) DO UPDATE
+      SET stock_actual = stock_insumos_centros.stock_actual + EXCLUDED.stock_actual,
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
       RETURNING *;
-    `, [qty, parseInt(id, 10)]);
+    `, [qty, parseInt(id, 10), centro]);
 
     if (updateRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -236,9 +269,9 @@ router.post('/:id/reabastecer', authenticateToken, async (req, res) => {
 
     // Registrar en la bitácora de movimientos
     await client.query(`
-      INSERT INTO movimientos_insumos (insumo_id, tipo_movimiento, cantidad, usuario_id, motivo)
-      VALUES ($1, 'entrada', $2, $3, $4)
-    `, [parseInt(id, 10), qty, req.user.id, motivo || 'Reabastecimiento de inventario']);
+      INSERT INTO movimientos_insumos (insumo_id, centro_stock_id, tipo_movimiento, cantidad, usuario_id, motivo)
+      VALUES ($1, $2, 'entrada', $3, $4, $5)
+    `, [parseInt(id, 10), centro, qty, req.user.id, motivo || 'Reabastecimiento de inventario']);
 
     await client.query('COMMIT');
     res.json({ message: 'Stock reabastecido con éxito', insumo: updateRes.rows[0] });
@@ -261,9 +294,11 @@ router.get('/historial/movimientos', authenticateToken, async (req, res) => {
         i.nombre as insumo_nombre,
         i.unidad_medida,
         i.presentacion,
+        c.nombre as centro_stock_nombre,
         u.nombre as usuario_nombre
       FROM movimientos_insumos m
       JOIN insumos i ON m.insumo_id = i.id
+      LEFT JOIN centros_stock c ON m.centro_stock_id = c.id
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       ORDER BY m.created_at DESC
       LIMIT 100;
