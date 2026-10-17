@@ -4,8 +4,43 @@ const pool = require('../config/db');
 const { parseExcelBuffer } = require('../services/excel.service');
 const { generateQRDataUrl, getLocalIpAddress } = require('../services/qr.service');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
+const { saveDetail, quoteIdentifier, tableName } = require('../services/category-schema.service');
 
 const router = express.Router();
+
+async function saveCategoryAttributes(client, tipoId, equipoId, values) {
+  const attributesResult = await client.query(
+    'SELECT nombre, clave, tipo, requerido FROM atributos_tipo_equipo WHERE tipo_equipo_id = $1 ORDER BY orden', [tipoId]
+  );
+  const attributes = attributesResult.rows;
+  for (const attribute of attributes) {
+    if (attribute.requerido && (values?.[attribute.clave] === undefined || values[attribute.clave] === '')) {
+      throw new Error(`El atributo "${attribute.nombre}" es obligatorio`);
+    }
+  }
+  await saveDetail(client, tipoId, equipoId, attributes, values);
+}
+
+async function attachCategoryAttributes(client, equipo) {
+  const attributes = await client.query(
+    'SELECT clave FROM atributos_tipo_equipo WHERE tipo_equipo_id = $1 ORDER BY orden', [equipo.tipo_equipo_id]
+  );
+  if (!attributes.rows.length) return { ...equipo, atributos_categoria: {} };
+  const detail = await client.query(
+    `SELECT * FROM ${quoteIdentifier(tableName(equipo.tipo_equipo_id))} WHERE equipo_id = $1`, [equipo.id]
+  );
+  const values = detail.rows[0] || {};
+  return {
+    ...equipo,
+    atributos_categoria: Object.fromEntries(attributes.rows.map(({ clave }) => [clave, values[clave] ?? '']))
+  };
+}
+
+function categoryValuesFromRequest(attributes, legacyValues) {
+  // Mantiene compatibilidad con importaciones y formularios anteriores, pero
+  // prioriza el formulario estructurado de la categoría.
+  return { ...legacyValues, ...(attributes || {}) };
+}
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -147,7 +182,7 @@ router.get('/:identifier', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Equipo no encontrado' });
     }
 
-    res.json(result.rows[0]);
+    res.json(await attachCategoryAttributes(pool, result.rows[0]));
   } catch (err) {
     console.error('Error al obtener el equipo:', err);
     res.status(500).json({ error: 'Error al consultar la información del equipo' });
@@ -183,7 +218,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra, atributos_categoria
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -212,6 +247,10 @@ router.post('/', authenticateToken, async (req, res) => {
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
     const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
+    const categoryValues = categoryValuesFromRequest(atributos_categoria, {
+      hostname, marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+    });
 
     const query = `
       INSERT INTO equipos (
@@ -223,13 +262,14 @@ router.post('/', authenticateToken, async (req, res) => {
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
-      marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, jsonExtra
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, categoryValues.hostname,
+      categoryValues.marca, categoryValues.modelo, categoryValues.serial, categoryValues.so, categoryValues.cpu, categoryValues.ram_capacidad, categoryValues.disco_capacidad,
+      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones, jsonExtra
     ];
 
     const result = await pool.query(query, values);
-    res.status(201).json(result.rows[0]);
+    await saveCategoryAttributes(pool, targetTipoEquipoId, result.rows[0].id, categoryValues);
+    res.status(201).json(await attachCategoryAttributes(pool, result.rows[0]));
   } catch (err) {
     console.error('Error al crear equipo:', err);
     res.status(500).json({ error: err.message || 'Error al guardar el equipo' });
@@ -347,7 +387,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra, atributos_categoria
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -368,6 +408,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
     const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
+    const categoryValues = categoryValuesFromRequest(atributos_categoria, {
+      hostname, marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+    });
 
     const query = `
       UPDATE equipos SET
@@ -380,9 +424,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     `;
 
     const values = [
-      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, hostname,
-      marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, jsonExtra,
+      item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, categoryValues.hostname,
+      categoryValues.marca, categoryValues.modelo, categoryValues.serial, categoryValues.so, categoryValues.cpu, categoryValues.ram_capacidad, categoryValues.disco_capacidad,
+      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones, jsonExtra,
       id
     ];
 
@@ -392,6 +436,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     const updatedEquipo = result.rows[0];
+    await saveCategoryAttributes(pool, targetTipoEquipoId, updatedEquipo.id, categoryValues);
 
     // Registrar en asignaciones si el equipo fue asignado a un empleado
     if (targetEmpleadoId) {
@@ -409,7 +454,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    res.json(updatedEquipo);
+    res.json(await attachCategoryAttributes(pool, updatedEquipo));
   } catch (err) {
     console.error('Error al actualizar equipo:', err);
     res.status(500).json({ error: 'Error al actualizar información del equipo' });

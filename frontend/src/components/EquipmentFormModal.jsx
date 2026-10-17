@@ -23,7 +23,8 @@ const INITIAL_FORM = {
   mac_wifi: '',
   uso_recomendado: '',
   observaciones: '',
-  especificaciones_extra: {}
+  especificaciones_extra: {},
+  atributos_categoria: {}
 };
 
 export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentToEdit, token }) {
@@ -71,7 +72,8 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
           ...INITIAL_FORM,
           ...equipmentToEdit,
           tipo_equipo_id: equipmentToEdit.tipo_equipo_id || 1,
-          especificaciones_extra: extra
+          especificaciones_extra: extra,
+          atributos_categoria: equipmentToEdit.atributos_categoria || {}
         });
       } else {
         setFormData(INITIAL_FORM);
@@ -94,6 +96,14 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
         ...(prev.especificaciones_extra || {}),
         [name]: value
       }
+    }));
+  };
+
+  const handleCategoryAttributeChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      atributos_categoria: { ...(prev.atributos_categoria || {}), [name]: type === 'checkbox' ? checked : value }
     }));
   };
 
@@ -127,6 +137,11 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
 
   const currentTipoId = Number(formData.tipo_equipo_id || 1);
   const extraSpecs = formData.especificaciones_extra || {};
+  const selectedTipo = catalogos.tipos_equipo.find(tipo => Number(tipo.id) === currentTipoId);
+  const categoryAttributes = selectedTipo?.atributos || [];
+  const usesStructuredSchema = categoryAttributes.some(attribute =>
+    attribute.clave === 'estado_fisico' || attribute.clave === 'uso_recomendado'
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
@@ -267,8 +282,37 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
               Identificación y Hardware / Especificaciones
             </h3>
 
+            {categoryAttributes.length > 0 && (
+              <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                <p className="mb-3 text-xs font-semibold text-indigo-800">Atributos de {selectedTipo?.nombre}</p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {categoryAttributes.map(attribute => (
+                    <div key={attribute.clave}>
+                      {attribute.tipo === 'si_no' ? (
+                        <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                          <input type="checkbox" name={attribute.clave}
+                            checked={Boolean(formData.atributos_categoria?.[attribute.clave])}
+                            onChange={handleCategoryAttributeChange} className="h-4 w-4 rounded border-gray-300" />
+                          {attribute.nombre}{attribute.requerido ? ' *' : ''}
+                        </label>
+                      ) : (
+                        <>
+                          <label className="mb-1 block text-xs font-semibold text-gray-700">{attribute.nombre}{attribute.requerido ? ' *' : ''}</label>
+                          <input type={attribute.tipo === 'numero' ? 'number' : attribute.tipo === 'fecha' ? 'date' : 'text'}
+                            step={attribute.tipo === 'numero' ? 'any' : undefined} name={attribute.clave}
+                            required={attribute.requerido} value={formData.atributos_categoria?.[attribute.clave] ?? ''}
+                            onChange={handleCategoryAttributeChange}
+                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Categoría 1: Equipo de Cómputo & Categoría 6: Servidor / Almacenamiento */}
-            {(currentTipoId === 1 || currentTipoId === 6) && (
+            {categoryAttributes.length === 0 && (currentTipoId === 1 || currentTipoId === 6) && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Hostname (Nombre Red)</label>
@@ -375,7 +419,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 2: Impresora / Multifuncional */}
-            {currentTipoId === 2 && (
+            {categoryAttributes.length === 0 && currentTipoId === 2 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -431,7 +475,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 3: Monitor / Pantalla */}
-            {currentTipoId === 3 && (
+            {categoryAttributes.length === 0 && currentTipoId === 3 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -497,7 +541,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 4: Redes y Comunicaciones */}
-            {currentTipoId === 4 && (
+            {categoryAttributes.length === 0 && currentTipoId === 4 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -554,7 +598,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 5: Periféricos y Accesorios */}
-            {currentTipoId === 5 && (
+            {categoryAttributes.length === 0 && currentTipoId === 5 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -613,7 +657,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 7: Movilidad / Smartphone / Tablet */}
-            {currentTipoId === 7 && (
+            {categoryAttributes.length === 0 && currentTipoId === 7 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -722,7 +766,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             )}
 
             {/* Categoría 8: No Break / UPS */}
-            {currentTipoId === 8 && (
+            {categoryAttributes.length === 0 && currentTipoId === 8 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Marca *</label>
@@ -788,7 +832,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
           </div>
 
           {/* Detalles Técnicos Adicionales */}
-          <div>
+          {!usesStructuredSchema && <div>
             <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
               Estado Físico & Uso
             </h3>
@@ -827,10 +871,10 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                 />
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* Observaciones */}
-          <div>
+          {!usesStructuredSchema && <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Observaciones</label>
             <textarea
               name="observaciones"
@@ -840,7 +884,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
               className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
               placeholder="Detalles adicionales, accesorios o historial del equipo..."
             ></textarea>
-          </div>
+          </div>}
 
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <button

@@ -19,6 +19,7 @@ const catalogosRoutes = require('./routes/catalogos.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const insumosRoutes = require('./routes/insumos.routes');
 const ticketsRoutes = require('./routes/tickets.routes');
+const { createDetailTable, DEFAULT_CATEGORY_ATTRIBUTES } = require('./services/category-schema.service');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -248,6 +249,37 @@ async function initDatabase() {
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS especificaciones_extra JSONB DEFAULT '{}';
       UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id IS NULL;
     `);
+
+    // Cada categoría posee una tabla de detalle propia. Los atributos se definen
+    // desde Catálogos y nunca se interpolan sin validación en las rutas.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS atributos_tipo_equipo (
+        id SERIAL PRIMARY KEY,
+        tipo_equipo_id INT NOT NULL REFERENCES tipos_equipo(id) ON DELETE CASCADE,
+        nombre VARCHAR(100) NOT NULL,
+        clave VARCHAR(50) NOT NULL,
+        tipo VARCHAR(20) NOT NULL DEFAULT 'texto',
+        requerido BOOLEAN NOT NULL DEFAULT FALSE,
+        orden INT NOT NULL DEFAULT 0,
+        UNIQUE (tipo_equipo_id, clave)
+      );
+    `);
+    for (const [tipoId, atributos] of Object.entries(DEFAULT_CATEGORY_ATTRIBUTES)) {
+      for (const [orden, atributo] of atributos.entries()) {
+        await pool.query(`
+          INSERT INTO atributos_tipo_equipo (tipo_equipo_id, nombre, clave, tipo, requerido, orden)
+          VALUES ($1, $2, $3, $4, FALSE, $5)
+          ON CONFLICT (tipo_equipo_id, clave) DO NOTHING
+        `, [tipoId, atributo.nombre, atributo.clave, atributo.tipo, orden]);
+      }
+    }
+    const tiposExistentes = await pool.query('SELECT id FROM tipos_equipo');
+    for (const tipo of tiposExistentes.rows) {
+      const atributos = await pool.query(
+        'SELECT nombre, clave, tipo, requerido FROM atributos_tipo_equipo WHERE tipo_equipo_id = $1 ORDER BY orden', [tipo.id]
+      );
+      await createDetailTable(pool, tipo.id, atributos.rows);
+    }
 
     // 4.5. Extraer catálogos únicos de empresas, bases y áreas a sus respectivas tablas
     await pool.query(`

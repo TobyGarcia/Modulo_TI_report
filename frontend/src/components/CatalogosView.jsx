@@ -14,7 +14,7 @@ export default function CatalogosView({ token }) {
   const [success, setSuccess] = useState(null);
 
   // Forms
-  const [newTipo, setNewTipo] = useState({ nombre: '', descripcion: '' });
+  const [newTipo, setNewTipo] = useState({ nombre: '', descripcion: '', atributos: [] });
   const [newEmpresa, setNewEmpresa] = useState({ nombre: '', acronimo: '' });
   const [newBase, setNewBase] = useState('');
   const [newArea, setNewArea] = useState('');
@@ -74,7 +74,7 @@ export default function CatalogosView({ token }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar tipo');
-      setNewTipo({ nombre: '', descripcion: '' });
+      setNewTipo({ nombre: '', descripcion: '', atributos: [] });
       showNotification('Categoría / Tipo de equipo añadido correctamente');
       fetchCatalogos();
     } catch (err) {
@@ -87,7 +87,7 @@ export default function CatalogosView({ token }) {
       alert('No es posible eliminar la categoría predeterminada "Equipo de Cómputo".');
       return;
     }
-    if (!window.confirm(`¿Estás seguro de eliminar la categoría "${nombre}"? Los equipos que pertenezcan a esta categoría volverán al tipo predeterminado "Equipo de Cómputo".`)) return;
+    if (!window.confirm(`¿Estás seguro de eliminar la categoría "${nombre}"? Los equipos volverán a "Equipo de Cómputo" y se eliminará su tabla de atributos específicos.`)) return;
 
     try {
       const res = await fetch(`/api/catalogos/tipos-equipo/${id}`, {
@@ -390,6 +390,26 @@ export default function CatalogosView({ token }) {
                     className="w-full border rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                   ></textarea>
                 </div>
+                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-700">Atributos específicos</label>
+                    <button type="button" onClick={() => setNewTipo(prev => ({ ...prev, atributos: [...prev.atributos, { nombre: '', tipo: 'texto', requerido: false }] }))}
+                      className="rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-amber-800 shadow-sm border">+ Atributo</button>
+                  </div>
+                  <p className="text-[10px] text-gray-500">Se creará una tabla exclusiva para esta categoría con estos campos.</p>
+                  {newTipo.atributos.map((attribute, index) => (
+                    <div key={index} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                      <input required value={attribute.nombre} placeholder="Ej. Capacidad de tóner"
+                        onChange={(e) => setNewTipo(prev => ({ ...prev, atributos: prev.atributos.map((item, i) => i === index ? { ...item, nombre: e.target.value } : item) }))}
+                        className="min-w-0 rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-amber-500" />
+                      <select value={attribute.tipo} onChange={(e) => setNewTipo(prev => ({ ...prev, atributos: prev.atributos.map((item, i) => i === index ? { ...item, tipo: e.target.value } : item) }))}
+                        className="rounded-lg border px-1 py-1.5 text-[11px]">
+                        <option value="texto">Texto</option><option value="numero">Número</option><option value="fecha">Fecha</option><option value="si_no">Sí / No</option>
+                      </select>
+                      <div className="flex items-center gap-1"><label title="Obligatorio" className="text-[10px] text-gray-600"><input type="checkbox" checked={attribute.requerido} onChange={(e) => setNewTipo(prev => ({ ...prev, atributos: prev.atributos.map((item, i) => i === index ? { ...item, requerido: e.target.checked } : item) }))} /> *</label><button type="button" title="Quitar" onClick={() => setNewTipo(prev => ({ ...prev, atributos: prev.atributos.filter((_, i) => i !== index) }))} className="text-red-600">×</button></div>
+                    </div>
+                  ))}
+                </div>
                 <button
                   type="submit"
                   className="w-full flex items-center justify-center space-x-2 py-2.5 bg-black hover:bg-neutral-800 text-[#e6b520] font-bold rounded-xl text-xs shadow transition border border-amber-900/40"
@@ -510,6 +530,7 @@ export default function CatalogosView({ token }) {
                         {item.descripcion && (
                           <p className="text-xs text-gray-500 mt-0.5">{item.descripcion}</p>
                         )}
+                        <p className="mt-1 text-[10px] text-indigo-600">Tabla: {item.tabla_detalle || `equipos_categoria_${item.id}`} · {item.atributos?.length || 0} atributo(s)</p>
                       </div>
                       {item.id !== 1 ? (
                         <div className="flex items-center gap-1">

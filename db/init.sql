@@ -37,6 +37,19 @@ CREATE TABLE IF NOT EXISTS tipos_equipo (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Definición de los campos que pertenecen exclusivamente a cada categoría.
+-- El backend crea la tabla física equipos_categoria_<id> con estas columnas.
+CREATE TABLE IF NOT EXISTS atributos_tipo_equipo (
+    id SERIAL PRIMARY KEY,
+    tipo_equipo_id INT NOT NULL REFERENCES tipos_equipo(id) ON DELETE CASCADE,
+    nombre VARCHAR(100) NOT NULL,
+    clave VARCHAR(50) NOT NULL,
+    tipo VARCHAR(20) NOT NULL DEFAULT 'texto',
+    requerido BOOLEAN NOT NULL DEFAULT FALSE,
+    orden INT NOT NULL DEFAULT 0,
+    UNIQUE (tipo_equipo_id, clave)
+);
+
 -- Inserción de tipos predeterminados
 INSERT INTO tipos_equipo (id, nombre, descripcion) VALUES
 (1, 'Equipo de Cómputo', 'Computadoras de escritorio, laptops y All-in-One'),
@@ -48,6 +61,29 @@ INSERT INTO tipos_equipo (id, nombre, descripcion) VALUES
 (7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
 (8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
 ON CONFLICT (id) DO NOTHING;
+
+-- Campos técnicos propios de las categorías originales. Los campos generales
+-- continúan en equipos; el backend materializa estos campos en su tabla hija.
+INSERT INTO atributos_tipo_equipo (tipo_equipo_id, nombre, clave, tipo, requerido, orden) VALUES
+(2, 'Tipo de impresora', 'tipo_impresora', 'texto', FALSE, 0),
+(2, 'Conectividad', 'conectividad', 'texto', FALSE, 1),
+(2, 'Impresión dúplex', 'duplex', 'si_no', FALSE, 2),
+(3, 'Tamaño de pantalla', 'tamano_pantalla', 'texto', FALSE, 0),
+(3, 'Resolución', 'resolucion', 'texto', FALSE, 1),
+(3, 'Anclaje / soporte', 'anclaje', 'texto', FALSE, 2),
+(4, 'Tipo de dispositivo', 'tipo_redes', 'texto', FALSE, 0),
+(4, 'Cantidad de puertos', 'puertos', 'numero', FALSE, 1),
+(4, 'Velocidad de red', 'velocidad_red', 'texto', FALSE, 2),
+(5, 'Tipo de accesorio', 'tipo_periferico', 'texto', FALSE, 0),
+(5, 'Conectividad', 'conectividad', 'texto', FALSE, 1),
+(6, 'Tipo de servidor / almacenamiento', 'tipo_servidor', 'texto', FALSE, 0),
+(6, 'Cantidad de bahías', 'bahias', 'numero', FALSE, 1),
+(7, 'Número telefónico', 'numero_telefono', 'texto', FALSE, 0),
+(7, 'IMEI 1', 'imei1', 'texto', FALSE, 1),
+(7, 'IMEI 2', 'imei2', 'texto', FALSE, 2),
+(8, 'Capacidad (Watts / VA)', 'capacidad_watts', 'texto', FALSE, 0),
+(8, 'Tipo de UPS', 'tipo_ups', 'texto', FALSE, 1)
+ON CONFLICT (tipo_equipo_id, clave) DO NOTHING;
 
 -- Tablas de Catálogos Dinámicos
 CREATE TABLE IF NOT EXISTS catalogos_empresas (

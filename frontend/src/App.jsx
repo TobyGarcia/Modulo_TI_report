@@ -183,9 +183,15 @@ export default function App() {
     setIsFormModalOpen(true);
   };
 
-  const handleOpenEditModal = (equipo) => {
-    setEquipmentToEdit(equipo);
-    setIsFormModalOpen(true);
+  const handleOpenEditModal = async (equipo) => {
+    try {
+      const res = await fetch(`/api/equipos/${equipo.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('No fue posible cargar el detalle del equipo');
+      setEquipmentToEdit(await res.json());
+      setIsFormModalOpen(true);
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   const handleOpenPrintView = (equipments, ip) => {

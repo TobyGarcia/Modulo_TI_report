@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
+const { validateAttributes, createDetailTable, quoteIdentifier, tableName } = require('../services/category-schema.service');
 
 const router = express.Router();
 
@@ -11,7 +12,14 @@ router.use(authorizeRoles('admin'));
 // Obtener todos los catálogos en un solo llamado
 router.get('/', async (req, res) => {
   try {
-    const tipos = await pool.query('SELECT * FROM tipos_equipo ORDER BY id ASC');
+    const tipos = await pool.query(`
+      SELECT t.*, COALESCE((
+        SELECT json_agg(json_build_object('id', a.id, 'nombre', a.nombre, 'clave', a.clave,
+          'tipo', a.tipo, 'requerido', a.requerido, 'orden', a.orden) ORDER BY a.orden)
+        FROM atributos_tipo_equipo a WHERE a.tipo_equipo_id = t.id
+      ), '[]'::json) AS atributos
+      FROM tipos_equipo t ORDER BY t.id ASC
+    `);
     const empresas = await pool.query('SELECT * FROM catalogos_empresas ORDER BY nombre ASC');
     const bases = await pool.query('SELECT * FROM catalogos_bases ORDER BY nombre ASC');
     const areas = await pool.query('SELECT * FROM catalogos_areas ORDER BY nombre ASC');
@@ -32,17 +40,32 @@ router.get('/', async (req, res) => {
 
 router.post('/tipos-equipo', async (req, res) => {
   try {
-    const { nombre, descripcion } = req.body;
+    const { nombre, descripcion, atributos = [] } = req.body;
     if (!nombre || !nombre.trim()) {
       return res.status(400).json({ error: 'El nombre del tipo de equipo es obligatorio' });
     }
 
-    const result = await pool.query(
-      'INSERT INTO tipos_equipo (nombre, descripcion) VALUES ($1, $2) RETURNING *',
-      [nombre.trim(), descripcion ? descripcion.trim() : null]
-    );
-
-    res.status(201).json(result.rows[0]);
+    const normalizedAttributes = validateAttributes(atributos);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        'INSERT INTO tipos_equipo (nombre, descripcion) VALUES ($1, $2) RETURNING *',
+        [nombre.trim(), descripcion ? descripcion.trim() : null]
+      );
+      const tipo = result.rows[0];
+      for (const [orden, attribute] of normalizedAttributes.entries()) {
+        await client.query(`INSERT INTO atributos_tipo_equipo
+          (tipo_equipo_id, nombre, clave, tipo, requerido, orden) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [tipo.id, attribute.nombre, attribute.clave, attribute.tipo, attribute.requerido, orden]);
+      }
+      await createDetailTable(client, tipo.id, normalizedAttributes);
+      await client.query('COMMIT');
+      res.status(201).json({ ...tipo, atributos: normalizedAttributes, tabla_detalle: tableName(tipo.id) });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   } catch (err) {
     console.error('Error al crear tipo de equipo:', err);
     if (err.code === '23505') {
@@ -77,6 +100,7 @@ router.put('/tipos-equipo/:id', async (req, res) => {
 });
 
 router.delete('/tipos-equipo/:id', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const numericId = parseInt(id, 10);
@@ -86,19 +110,23 @@ router.delete('/tipos-equipo/:id', async (req, res) => {
     }
 
     // Reasignar los equipos que usen este tipo_equipo al por defecto (1)
-    await pool.query('UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id = $1', [numericId]);
+    await client.query('BEGIN');
+    await client.query('UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id = $1', [numericId]);
 
-    const result = await pool.query('DELETE FROM tipos_equipo WHERE id = $1 RETURNING *', [numericId]);
+    const result = await client.query('DELETE FROM tipos_equipo WHERE id = $1 RETURNING *', [numericId]);
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Tipo de equipo no encontrado' });
     }
-
+    await client.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName(numericId))}`);
+    await client.query('COMMIT');
     res.json({ message: 'Tipo de equipo eliminado correctamente', tipo: result.rows[0] });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error al eliminar tipo de equipo:', err);
     res.status(500).json({ error: 'Error al eliminar tipo de equipo' });
-  }
+  } finally { client.release(); }
 });
 
 // --- CRUD EMPRESAS ---
