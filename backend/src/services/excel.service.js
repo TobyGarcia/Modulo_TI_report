@@ -1,39 +1,5 @@
 const xlsx = require('xlsx');
 
-const INVENTORY_COLUMNS = [
-  ['ID', 'id'],
-  ['Item', 'item'],
-  ['Estado', 'estado_nombre'],
-  ['Empresa', 'empresa'],
-  ['Base / Ciudad', 'ciudad'],
-  ['Área', 'area'],
-  ['Responsable', 'responsable'],
-  ['No. empleado', 'no_empleado'],
-  ['Puesto', 'puesto'],
-  ['Hostname', 'hostname'],
-  ['Marca', 'marca'],
-  ['Modelo', 'modelo'],
-  ['Serial', 'serial'],
-  ['Sistema operativo', 'so'],
-  ['Procesador', 'cpu'],
-  ['RAM', 'ram_capacidad'],
-  ['Almacenamiento', 'disco_capacidad'],
-  ['Tipo de GPU', 'gpu_tipo'],
-  ['Modelo de GPU', 'gpu_modelo'],
-  ['MAC Wi-Fi / red', 'mac_wifi'],
-  ['Estado físico', 'estado_fisico'],
-  ['Uso recomendado', 'uso_recomendado'],
-  ['Observaciones', 'observaciones'],
-  ['Fecha de registro', 'created_at'],
-  ['Última actualización', 'updated_at']
-];
-
-const COMMON_CATEGORY_KEYS = new Set([
-  'marca', 'modelo', 'serial', 'estado_fisico', 'uso_recomendado', 'observaciones',
-  'hostname', 'so', 'cpu', 'ram_capacidad', 'disco_capacidad', 'gpu_tipo',
-  'gpu_modelo', 'mac_wifi'
-]);
-
 function excelValue(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
@@ -83,15 +49,12 @@ function buildInventoryWorkbook(categories) {
   xlsx.utils.book_append_sheet(workbook, summary, 'Resumen');
 
   for (const category of categories) {
-    const specificAttributes = category.attributes.filter(attribute => !COMMON_CATEGORY_KEYS.has(attribute.clave));
-    const headers = [
-      ...INVENTORY_COLUMNS.map(([label]) => label),
-      ...specificAttributes.map(attribute => attribute.nombre)
-    ];
-    const rows = category.rows.map(row => [
-      ...INVENTORY_COLUMNS.map(([, key]) => excelValue(row[key])),
-      ...specificAttributes.map(attribute => excelValue(row[`detail__${attribute.clave}`]))
-    ]);
+    // Cada pestaña replica exclusivamente los campos de la ficha/modal de su
+    // categoría. Los datos administrativos permanecen en el sistema.
+    const headers = category.attributes.map(attribute => attribute.nombre);
+    const rows = category.rows.map(row =>
+      category.attributes.map(attribute => excelValue(row[`detail__${attribute.clave}`]))
+    );
     xlsx.utils.book_append_sheet(workbook, buildWorksheet(headers, rows), safeSheetName(category.nombre, usedNames));
   }
 

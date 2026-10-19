@@ -142,6 +142,43 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
   const usesStructuredSchema = categoryAttributes.some(attribute =>
     attribute.clave === 'estado_fisico' || attribute.clave === 'uso_recomendado'
   );
+  const physicalAttributeKeys = new Set(['mac_wifi', 'estado_fisico', 'uso_recomendado', 'observaciones']);
+  const hardwareAttributes = categoryAttributes.filter(attribute => !physicalAttributeKeys.has(attribute.clave));
+  const physicalAttributes = categoryAttributes.filter(attribute =>
+    ['mac_wifi', 'estado_fisico', 'uso_recomendado'].includes(attribute.clave)
+  );
+  const macAttribute = physicalAttributes.find(attribute => attribute.clave === 'mac_wifi');
+  const observationsAttribute = categoryAttributes.find(attribute => attribute.clave === 'observaciones');
+
+  const renderCategoryAttribute = (attribute, options = {}) => {
+    const value = formData.atributos_categoria?.[attribute.clave] ?? '';
+    const fieldClass = options.fullWidth ? 'md:col-span-3' : '';
+    if (attribute.tipo === 'si_no') {
+      return (
+        <label key={attribute.clave} className={`flex items-center gap-2 self-end pb-2 text-xs font-semibold text-gray-700 ${fieldClass}`}>
+          <input type="checkbox" name={attribute.clave} checked={Boolean(value)}
+            onChange={handleCategoryAttributeChange} className="h-4 w-4 rounded border-gray-300" />
+          {attribute.nombre}{attribute.requerido ? ' *' : ''}
+        </label>
+      );
+    }
+    return (
+      <div key={attribute.clave} className={fieldClass}>
+        <label className="mb-1 block text-xs font-semibold text-gray-700">{attribute.nombre}{attribute.requerido ? ' *' : ''}</label>
+        {options.textarea ? (
+          <textarea name={attribute.clave} rows={3} required={attribute.requerido} value={value}
+            onChange={handleCategoryAttributeChange}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            placeholder="Detalles adicionales, accesorios o historial del equipo..." />
+        ) : (
+          <input type={attribute.tipo === 'numero' ? 'number' : attribute.tipo === 'fecha' ? 'date' : 'text'}
+            step={attribute.tipo === 'numero' ? 'any' : undefined} name={attribute.clave}
+            required={attribute.requerido} value={value} onChange={handleCategoryAttributeChange}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
@@ -283,31 +320,8 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             </h3>
 
             {categoryAttributes.length > 0 && (
-              <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
-                <p className="mb-3 text-xs font-semibold text-indigo-800">Atributos de {selectedTipo?.nombre}</p>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {categoryAttributes.map(attribute => (
-                    <div key={attribute.clave}>
-                      {attribute.tipo === 'si_no' ? (
-                        <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
-                          <input type="checkbox" name={attribute.clave}
-                            checked={Boolean(formData.atributos_categoria?.[attribute.clave])}
-                            onChange={handleCategoryAttributeChange} className="h-4 w-4 rounded border-gray-300" />
-                          {attribute.nombre}{attribute.requerido ? ' *' : ''}
-                        </label>
-                      ) : (
-                        <>
-                          <label className="mb-1 block text-xs font-semibold text-gray-700">{attribute.nombre}{attribute.requerido ? ' *' : ''}</label>
-                          <input type={attribute.tipo === 'numero' ? 'number' : attribute.tipo === 'fecha' ? 'date' : 'text'}
-                            step={attribute.tipo === 'numero' ? 'any' : undefined} name={attribute.clave}
-                            required={attribute.requerido} value={formData.atributos_categoria?.[attribute.clave] ?? ''}
-                            onChange={handleCategoryAttributeChange}
-                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {hardwareAttributes.map(attribute => renderCategoryAttribute(attribute))}
               </div>
             )}
 
@@ -832,7 +846,32 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
           </div>
 
           {/* Detalles Técnicos Adicionales */}
-          {!usesStructuredSchema && <div>
+          {usesStructuredSchema ? <>
+            <div>
+              <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
+                Estado Físico & Uso
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {!macAttribute && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">MAC Wi-Fi / Red (Si aplica)</label>
+                    <input
+                      type="text"
+                      name="mac_wifi"
+                      value={formData.mac_wifi || ''}
+                      onChange={handleChange}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      placeholder="AA:BB:CC:DD:EE:FF"
+                    />
+                  </div>
+                )}
+                {physicalAttributes.map(attribute => renderCategoryAttribute(attribute))}
+              </div>
+            </div>
+            {observationsAttribute && (
+              <div>{renderCategoryAttribute(observationsAttribute, { textarea: true, fullWidth: true })}</div>
+            )}
+          </> : <div>
             <h3 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-3 border-b pb-1">
               Estado Físico & Uso
             </h3>
