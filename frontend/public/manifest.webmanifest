@@ -1,0 +1,21 @@
+{
+  "id": "sistemaqr-pwa",
+  "name": "Sistema QR ITZ",
+  "short_name": "Sistema QR",
+  "description": "Inventario, mesa de ayuda y soporte técnico de ITZ",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/icons/icon-tecnico.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}

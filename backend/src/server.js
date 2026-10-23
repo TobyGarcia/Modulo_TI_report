@@ -126,6 +126,7 @@ async function initDatabase() {
         area VARCHAR(100),
         puesto VARCHAR(100),
         email VARCHAR(100),
+        role VARCHAR(20) NOT NULL DEFAULT 'cliente',
         estado VARCHAR(20) DEFAULT 'activo',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -133,10 +134,40 @@ async function initDatabase() {
     `);
 
     await pool.query(`
+      ALTER TABLE empleados ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'cliente';
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(255);
       CREATE UNIQUE INDEX IF NOT EXISTS usuarios_cliente_empleado_unique
         ON usuarios (empleado_id) WHERE role = 'cliente' AND empleado_id IS NOT NULL;
+    `);
+
+    // Personal es el directorio maestro: cada cuenta de acceso queda vinculada a
+    // una persona. Conservamos usuarios como tabla técnica de autenticación para
+    // no romper las referencias históricas de tickets y movimientos.
+    await pool.query(`
+      DO $$
+      DECLARE account RECORD; new_employee_id INT;
+      BEGIN
+        FOR account IN SELECT id, nombre, email, role FROM usuarios WHERE empleado_id IS NULL LOOP
+          INSERT INTO empleados (nombre, email, role, estado)
+          VALUES (
+            COALESCE(NULLIF(TRIM(account.nombre), ''), 'Usuario ' || account.id),
+            account.email,
+            CASE WHEN account.role = 'supervisor' THEN 'admin' ELSE account.role END,
+            'activo'
+          ) RETURNING id INTO new_employee_id;
+          UPDATE usuarios SET empleado_id = new_employee_id,
+            role = CASE WHEN role = 'supervisor' THEN 'admin' ELSE role END
+          WHERE id = account.id;
+        END LOOP;
+      END $$;
+
+      UPDATE empleados e
+      SET role = CASE WHEN u.role = 'supervisor' THEN 'admin' ELSE u.role END
+      FROM usuarios u
+      WHERE u.empleado_id = e.id;
+
+      UPDATE usuarios SET role = 'admin' WHERE role = 'supervisor';
     `);
 
     // 3. Crear tabla de estados de equipo
@@ -698,10 +729,21 @@ async function initDatabase() {
         throw new Error('BOOTSTRAP_ADMIN_PASSWORD debe tener al menos 12 caracteres');
       }
       const passwordHash = await bcrypt.hash(bootstrapPassword, 12);
-      await pool.query(
-        "INSERT INTO usuarios (nombre, username, password_hash, role) VALUES ('Administrador', $1, $2, 'admin')",
-        [bootstrapUsername.trim(), passwordHash]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const employee = await client.query(
+          "INSERT INTO empleados (nombre, role, estado) VALUES ('Administrador', 'admin', 'activo') RETURNING id"
+        );
+        await client.query(
+          "INSERT INTO usuarios (nombre, username, password_hash, role, empleado_id) VALUES ('Administrador', $1, $2, 'admin', $3)",
+          [bootstrapUsername.trim(), passwordHash, employee.rows[0].id]
+        );
+        await client.query('COMMIT');
+      } catch (bootstrapError) {
+        await client.query('ROLLBACK');
+        throw bootstrapError;
+      } finally { client.release(); }
       console.log('Cuenta inicial de administrador creada desde variables de entorno.');
     } else if (users.rows[0].total === 0) {
       console.warn('No hay usuarios: configura BOOTSTRAP_ADMIN_USERNAME y BOOTSTRAP_ADMIN_PASSWORD para crear la cuenta inicial.');

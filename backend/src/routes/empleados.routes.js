@@ -6,6 +6,39 @@ const pool = require('../config/db');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
+const ACCESS_ROLES = ['cliente', 'tecnico', 'admin'];
+
+function accessRole(value) {
+  return ACCESS_ROLES.includes(value) ? value : 'cliente';
+}
+
+async function syncAccessAccount(client, employee, { username, password, role }) {
+  const selectedRole = accessRole(role);
+  const existingResult = await client.query('SELECT * FROM usuarios WHERE empleado_id = $1 LIMIT 1', [employee.id]);
+  const existing = existingResult.rows[0];
+
+  // Los clientes entran con PIN; la cuenta se crea al asignar el PIN.
+  if (selectedRole === 'cliente' && !existing) return;
+
+  if (!existing && (!username?.trim() || !password)) {
+    throw new Error('Usuario y contraseña son obligatorios para técnico o administrador');
+  }
+
+  const finalUsername = username?.trim() || existing?.username;
+  if (!finalUsername) throw new Error('El usuario es obligatorio');
+  const duplicate = await client.query('SELECT id FROM usuarios WHERE username = $1 AND id <> COALESCE($2, 0)', [finalUsername, existing?.id || null]);
+  if (duplicate.rows.length) throw new Error('El nombre de usuario ya está registrado');
+
+  const passwordHash = password ? await bcrypt.hash(password, 10) : existing?.password_hash;
+  if (existing) {
+    await client.query(`UPDATE usuarios
+      SET nombre = $1, username = $2, email = $3, role = $4, password_hash = $5
+      WHERE id = $6`, [employee.nombre, finalUsername, employee.email || null, selectedRole, passwordHash, existing.id]);
+  } else {
+    await client.query(`INSERT INTO usuarios (nombre, username, email, password_hash, role, empleado_id)
+      VALUES ($1, $2, $3, $4, $5, $6)`, [employee.nombre, finalUsername, employee.email || null, passwordHash, selectedRole, employee.id]);
+  }
+}
 const uploadCsv = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024, files: 1 },
@@ -44,14 +77,15 @@ function parseCsv(text) {
 const normalizeHeader = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
 // Listar empleados (Protegido)
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { q } = req.query;
     let query = `
-      SELECT e.*, EXISTS (
-        SELECT 1 FROM usuarios u WHERE u.empleado_id = e.id AND u.role = 'cliente' AND u.pin_hash IS NOT NULL
-      ) AS tiene_pin
-      FROM empleados e WHERE e.estado != 'inactivo'
+      SELECT e.*, u.username, (u.id IS NOT NULL) AS tiene_acceso,
+      EXISTS (SELECT 1 FROM usuarios pu WHERE pu.empleado_id = e.id AND pu.pin_hash IS NOT NULL) AS tiene_pin
+      FROM empleados e
+      LEFT JOIN usuarios u ON u.empleado_id = e.id
+      WHERE e.estado != 'inactivo'
     `;
     let params = [];
 
@@ -82,22 +116,23 @@ router.post('/:id/generar-pin', authenticateToken, authorizeRoles('admin'), asyn
     if (!employeeId) return res.status(400).json({ error: 'Empleado inválido' });
 
     const employeeResult = await pool.query(
-      "SELECT id, nombre, email FROM empleados WHERE id = $1 AND estado = 'activo'",
+      "SELECT id, nombre, email, role FROM empleados WHERE id = $1 AND estado = 'activo'",
       [employeeId]
     );
     if (!employeeResult.rows.length) return res.status(404).json({ error: 'Empleado no encontrado o inactivo' });
 
     const employee = employeeResult.rows[0];
+    if (employee.role !== 'cliente') return res.status(400).json({ error: 'El PIN sólo aplica a personal con rol Cliente' });
     const pin = String(crypto.randomInt(100000, 1000000));
     const pinHash = await bcrypt.hash(pin, 10);
     const existing = await pool.query(
-      "SELECT id FROM usuarios WHERE empleado_id = $1 AND role = 'cliente'",
+      "SELECT id FROM usuarios WHERE empleado_id = $1",
       [employeeId]
     );
 
     if (existing.rows.length) {
       await pool.query(
-        "UPDATE usuarios SET nombre = $1, email = $2, pin_hash = $3 WHERE id = $4",
+        "UPDATE usuarios SET nombre = $1, email = $2, role = 'cliente', pin_hash = $3 WHERE id = $4",
         [employee.nombre, employee.email || null, pinHash, existing.rows[0].id]
       );
     } else {
@@ -162,7 +197,7 @@ router.post('/import-csv', authenticateToken, authorizeRoles('admin'), uploadCsv
 });
 
 // Obtener un empleado por ID con sus equipos asignados (Protegido)
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const empResult = await pool.query('SELECT * FROM empleados WHERE id = $1', [id]);
@@ -192,9 +227,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Crear nuevo empleado ("Nuevo Personal de Ingreso") (Protegido)
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
-    const { nombre, area, empresa, no_empleado, puesto } = req.body;
+    const { nombre, area, empresa, no_empleado, puesto, email, role, username, password } = req.body;
 
     if (!nombre || !nombre.trim()) {
       return res.status(400).json({ error: 'El nombre del empleado es obligatorio' });
@@ -211,8 +246,8 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const empresaNombre = await getCompanyForEmployee(empresa);
     const query = `
-      INSERT INTO empleados (nombre, area, empresa, no_empleado, puesto, email, estado)
-      VALUES ($1, $2, $3, $4, $5, $6, 'activo')
+      INSERT INTO empleados (nombre, area, empresa, no_empleado, puesto, email, role, estado)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'activo')
       RETURNING *;
     `;
 
@@ -222,11 +257,21 @@ router.post('/', authenticateToken, async (req, res) => {
       empresaNombre,
       no_empleado ? no_empleado.trim() : null,
       puesto ? puesto.trim() : null,
-      null
+      email ? email.trim() : null,
+      accessRole(role)
     ];
 
-    const result = await pool.query(query, values);
-    res.status(201).json(result.rows[0]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(query, values);
+      await syncAccessAccount(client, result.rows[0], { username, password, role });
+      await client.query('COMMIT');
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   } catch (err) {
     console.error('Error al crear empleado:', err);
     res.status(500).json({ error: err.message || 'Error al guardar el empleado' });
@@ -234,17 +279,17 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Editar empleado (Protegido)
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, area, empresa, no_empleado, puesto, email, estado } = req.body;
+    const { nombre, area, empresa, no_empleado, puesto, email, estado, role, username, password } = req.body;
 
     const empresaNombre = await getCompanyForEmployee(empresa);
     const query = `
       UPDATE empleados SET
         nombre = $1, area = $2, empresa = $3, no_empleado = $4, puesto = $5, email = $6,
-        estado = COALESCE($7, estado), updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8
+        role = COALESCE($7, role), estado = COALESCE($8, estado), updated_at = CURRENT_TIMESTAMP
+      WHERE id = $9
       RETURNING *;
     `;
 
@@ -255,11 +300,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
       no_empleado ? no_empleado.trim() : null,
       puesto ? puesto.trim() : null,
       email ? email.trim() : null,
-      estado || 'activo',
-      id
+      accessRole(role),
+      estado || 'activo', id
     ];
 
-    const result = await pool.query(query, values);
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      result = await client.query(query, values);
+      if (result.rows.length) await syncAccessAccount(client, result.rows[0], { username, password, role: result.rows[0].role });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Empleado no encontrado' });
     }
@@ -284,7 +339,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Eliminar empleado (Protegido)
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -294,12 +349,16 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       [id]
     );
 
-    const result = await pool.query('DELETE FROM empleados WHERE id = $1 RETURNING *', [id]);
+    // Conserva la relación con la cuenta, tickets y movimientos. Un registro
+    // inactivo no aparece en Personal ni puede autenticarse en la PWA.
+    const result = await pool.query(
+      "UPDATE empleados SET estado = 'inactivo', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *", [id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Empleado no encontrado' });
     }
 
-    res.json({ message: 'Empleado eliminado correctamente', empleado: result.rows[0] });
+    res.json({ message: 'Personal desactivado correctamente', empleado: result.rows[0] });
   } catch (err) {
     console.error('Error al eliminar empleado:', err);
     res.status(500).json({ error: 'Error al eliminar el empleado' });

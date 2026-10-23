@@ -1,12 +1,10 @@
 // Service Worker para Sistema QR Multi-PWA
 // Incrementar este identificador en cada despliegue que cambie la interfaz.
 // Así las PWAs instaladas descartan los archivos de la versión anterior.
-const CACHE_NAME = 'sistemaqr-v2';
+const CACHE_NAME = 'sistemaqr-v3';
 const STATIC_ASSETS = [
   '/',
-  '/cliente',
-  '/tecnico',
-  '/supervisor',
+  '/manifest.webmanifest',
   '/icons/icon-cliente.svg',
   '/icons/icon-tecnico.svg',
   '/icons/icon-supervisor.svg'

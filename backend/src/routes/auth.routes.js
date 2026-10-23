@@ -22,7 +22,11 @@ router.post('/login', loginRateLimit, async (req, res) => {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
 
-    const result = await pool.query('SELECT * FROM usuarios WHERE username = $1', [username]);
+    const result = await pool.query(`
+      SELECT u.*, e.role AS employee_role, e.nombre AS employee_nombre, e.estado AS employee_estado
+      FROM usuarios u JOIN empleados e ON e.id = u.empleado_id
+      WHERE u.username = $1 AND e.estado = 'activo'
+    `, [username]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -36,7 +40,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
     }
 
     // Generar Token JWT firmado con la llave secreta de 32 bytes
-    const payload = { id: user.id, username: user.username, role: user.role, nombre: user.nombre };
+    const payload = { id: user.id, username: user.username, role: user.employee_role, nombre: user.employee_nombre, empleado_id: user.empleado_id };
     const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: '8h',
       algorithm: 'HS256',
@@ -69,7 +73,7 @@ router.post('/cliente-pin', loginRateLimit, async (req, res) => {
              e.nombre AS empleado_nombre, e.email, e.area, e.empresa
       FROM usuarios u
       JOIN empleados e ON e.id = u.empleado_id
-      WHERE u.role = 'cliente' AND u.pin_hash IS NOT NULL AND e.estado = 'activo'
+      WHERE e.role = 'cliente' AND u.pin_hash IS NOT NULL AND e.estado = 'activo'
     `);
 
     let clientUser = null;

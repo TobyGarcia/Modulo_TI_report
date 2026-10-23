@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Monitor,
-  Users,
   LogOut,
   UserCheck,
   ClipboardList,
@@ -32,7 +31,6 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }) {
     { id: 'bitacora', label: 'Bitácora & Agenda', icon: ClipboardList },
     { id: 'salidas', label: 'Salidas Equipos', icon: ExternalLink },
     { id: 'm365', label: 'Cuentas M365', icon: Mail },
-    { id: 'users', label: 'Usuarios TI', icon: Users },
   ];
 
   const handleSelectTab = (tabId) => {

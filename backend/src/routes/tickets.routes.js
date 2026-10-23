@@ -180,7 +180,9 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
     const ticket = result.rows[0];
     await pool.query(`
       INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo)
-      SELECT id, $1, 'nuevo_ticket' FROM usuarios WHERE role = 'tecnico'
+      SELECT u.id, $1, 'nuevo_ticket'
+      FROM usuarios u JOIN empleados e ON e.id = u.empleado_id
+      WHERE e.role = 'tecnico' AND e.estado = 'activo'
     `, [ticket.id]);
     delete ticket.cliente_token_hash;
     res.status(201).json({
@@ -465,7 +467,9 @@ router.put('/:id/aprobar-asignar', authenticateToken, authorizeRoles('admin', 's
     }
 
     const finalTecnicoId = parseInt(tecnico_id, 10);
-    const uRes = await pool.query("SELECT nombre FROM usuarios WHERE id = $1 AND role = 'tecnico'", [finalTecnicoId]);
+    const uRes = await pool.query(`SELECT e.nombre FROM usuarios u
+      JOIN empleados e ON e.id = u.empleado_id
+      WHERE u.id = $1 AND e.role = 'tecnico' AND e.estado = 'activo'`, [finalTecnicoId]);
     if (uRes.rows.length === 0) {
       return res.status(400).json({ error: 'El usuario seleccionado no es un técnico activo' });
     }

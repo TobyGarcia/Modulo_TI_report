@@ -18,7 +18,9 @@ router.use(authenticateToken);
 router.get('/tecnicos', authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, nombre, role FROM usuarios WHERE role = 'tecnico' ORDER BY nombre ASC"
+      `SELECT u.id, e.nombre, e.role
+       FROM usuarios u JOIN empleados e ON e.id = u.empleado_id
+       WHERE e.role = 'tecnico' AND e.estado = 'activo' ORDER BY e.nombre ASC`
     );
     res.json(result.rows);
   } catch (err) {

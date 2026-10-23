@@ -6,7 +6,6 @@ import EquipmentFormModal from './components/EquipmentFormModal';
 import ExcelImportModal from './components/ExcelImportModal';
 import LabelPrintView from './components/LabelPrintView';
 import ScanResultView from './components/ScanResultView';
-import UserManagement from './components/UserManagement';
 import BitacoraView from './components/BitacoraView';
 import EmployeeManagement from './components/EmployeeManagement';
 import SalidasView from './components/SalidasView';
@@ -314,6 +313,12 @@ export default function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={false} />;
   }
 
+  // La instalación única de la PWA inicia aquí. El rol decide la experiencia
+  // disponible sin requerir dominios ni aplicaciones separadas.
+  if (user?.role === 'tecnico') {
+    return <TechnicianPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
+  }
+
   // Vista de Impresión de Etiquetas
   if (currentView === 'print') {
     return (
@@ -382,9 +387,6 @@ export default function App() {
           )}
           {activeTab === 'm365' && (
             <M365View token={token} currentUser={user} />
-          )}
-          {activeTab === 'users' && (
-            <UserManagement token={token} currentUser={user} />
           )}
         </ErrorBoundary>
       </main>

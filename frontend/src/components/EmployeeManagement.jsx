@@ -18,7 +18,10 @@ export default function EmployeeManagement({ token }) {
     empresa: 'ITZ OIL & GAS',
     no_empleado: '',
     puesto: '',
-    email: ''
+    email: '',
+    role: 'cliente',
+    username: '',
+    password: ''
   });
 
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState(null);
@@ -70,7 +73,10 @@ export default function EmployeeManagement({ token }) {
       empresa: 'ITZ OIL & GAS',
       no_empleado: '',
       puesto: '',
-      email: ''
+      email: '',
+      role: 'cliente',
+      username: '',
+      password: ''
     });
     setError(null);
     setIsModalOpen(true);
@@ -84,7 +90,10 @@ export default function EmployeeManagement({ token }) {
       empresa: emp.empresa || 'ITZ OIL & GAS',
       no_empleado: emp.no_empleado || '',
       puesto: emp.puesto || '',
-      email: emp.email || ''
+      email: emp.email || '',
+      role: emp.role || 'cliente',
+      username: emp.username || '',
+      password: ''
     });
     setError(null);
     setIsModalOpen(true);
@@ -124,7 +133,7 @@ export default function EmployeeManagement({ token }) {
   };
 
   const handleDeleteEmployee = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este empleado? Sus equipos pasarán a estado de Resguardo.')) return;
+    if (!window.confirm('¿Desactivar a este integrante? Ya no podrá ingresar y sus equipos pasarán a Resguardo; se conservará su historial.')) return;
 
     try {
       const res = await fetch(`/api/empleados/${id}`, {
@@ -211,7 +220,7 @@ export default function EmployeeManagement({ token }) {
             <span>Gestión de Personal & Empleados</span>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Administración centralizada de empleados para asignación de equipos y responsivas.
+            Directorio único de personal, roles y accesos para la PWA.
           </p>
         </div>
 
@@ -274,6 +283,7 @@ export default function EmployeeManagement({ token }) {
                   <th className="p-4">Área / Departamento</th>
                   <th className="p-4">Empresa</th>
                   <th className="p-4">No. Empleado / Puesto</th>
+                  <th className="p-4">Rol / Acceso PWA</th>
                   <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -306,16 +316,26 @@ export default function EmployeeManagement({ token }) {
                       <div>{emp.no_empleado ? `ID: ${emp.no_empleado}` : 'Sin código'}</div>
                       <div className="text-gray-400 font-sans">{emp.puesto || ''}</div>
                     </td>
+                    <td className="p-4">
+                      <div className={`w-fit px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
+                        emp.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                        emp.role === 'tecnico' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                        'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {emp.role === 'admin' ? 'Administrador' : emp.role === 'tecnico' ? 'Técnico' : 'Cliente'}
+                      </div>
+                      <p className="mt-1 text-[10px] text-gray-400">{emp.role === 'cliente' ? (emp.tiene_pin ? 'PIN activo' : 'Sin PIN') : (emp.username ? `@${emp.username}` : 'Sin acceso')}</p>
+                    </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
-                        <button
+                        {emp.role === 'cliente' && <button
                           onClick={() => handleViewEmployeeDetail(emp.id)}
                           className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition text-xs font-semibold flex items-center space-x-1"
                           title="Ver Equipos Asignados"
                         >
                           <Laptop className="w-4 h-4" />
                           <span>Ver Equipos</span>
-                        </button>
+                        </button>}
                         <button
                           onClick={() => handleGeneratePin(emp)}
                           className={`p-1.5 rounded-lg transition text-xs font-semibold flex items-center space-x-1 ${emp.tiene_pin ? 'text-amber-700 hover:bg-amber-100' : 'text-emerald-700 hover:bg-emerald-100'}`}
@@ -387,21 +407,26 @@ export default function EmployeeManagement({ token }) {
                 />
               </div>
 
-              {editingEmployee ? (
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Correo Electrónico (M365 / Corporativo)</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="Ej. cmartinez@itz.com.mx"
-                    className="w-full bg-white border rounded-xl p-2.5 font-mono text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <p className="mt-1 text-[10px] text-gray-500">El correo se asigna desde Cuentas M365, o se importa con un archivo CSV.</p>
-                </div>
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Correo Electrónico (M365 / Corporativo)</label>
+                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="Ej. cmartinez@itz.com.mx" className="w-full bg-white border rounded-xl p-2.5 font-mono text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Rol de acceso *</label>
+                <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full bg-white border rounded-xl p-2.5 font-medium outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="cliente">Cliente — reporta y consulta sus tickets con PIN</option>
+                  <option value="tecnico">Técnico — atiende tickets asignados</option>
+                  <option value="admin">Administrador — menú y control completo</option>
+                </select>
+              </div>
+
+              {formData.role === 'cliente' ? (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800">El cliente ingresa a la PWA con un PIN de seis dígitos. Guárdalo desde la acción <strong>Asignar PIN</strong> después de crear el registro.</div>
               ) : (
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-indigo-800">
-                  El correo se asignará posteriormente desde <strong>Cuentas M365</strong>. Si ya cuenta con correo, impórtalo mediante CSV.
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold text-gray-700 block mb-1">Usuario *</label><input required={!editingEmployee} value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} className="w-full bg-white border rounded-xl p-2.5 font-medium outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ej. j.tovar" /></div>
+                  <div><label className="font-bold text-gray-700 block mb-1">{editingEmployee ? 'Nueva contraseña' : 'Contraseña *'}</label><input type="password" required={!editingEmployee} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full bg-white border rounded-xl p-2.5 font-medium outline-none focus:ring-2 focus:ring-indigo-500" placeholder={editingEmployee ? 'Sin cambio' : 'Mínimo 8 caracteres'} /></div>
                 </div>
               )}
 
