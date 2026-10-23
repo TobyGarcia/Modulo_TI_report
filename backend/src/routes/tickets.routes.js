@@ -114,16 +114,16 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
     });
     if (validationError) return res.status(400).json({ error: validationError });
 
-    // Si viene equipo_id pero faltan área/empresa, autocompletar desde el equipo
+    // El QR es opcional para clientes: permite identificar el equipo exacto.
+    // Sin QR se crea un reporte general ligado a la persona; si sólo tiene un
+    // equipo asignado, se asocia automáticamente para ayudar al técnico.
     let eqArea = clientEmployee.area || area_solicitante;
     let eqEmpresa = clientEmployee.empresa || empresa;
     let eqEmpId = clientEmployeeId;
+    let resolvedEquipmentId = equipo_id ? parseInt(equipo_id, 10) : null;
 
-    if (!equipo_id) {
-      return res.status(400).json({ error: 'Escanea el QR de un equipo asignado antes de levantar el reporte' });
-    }
-    if (equipo_id) {
-      const eqCheck = await pool.query('SELECT area, empresa, empleado_id FROM equipos WHERE id = $1', [equipo_id]);
+    if (resolvedEquipmentId) {
+      const eqCheck = await pool.query('SELECT area, empresa, empleado_id FROM equipos WHERE id = $1', [resolvedEquipmentId]);
       if (eqCheck.rows.length > 0) {
         if (eqCheck.rows[0].empleado_id !== clientEmployeeId) {
           return res.status(403).json({ error: 'Este equipo no está asignado a tu usuario' });
@@ -132,6 +132,17 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
         if (!eqEmpresa) eqEmpresa = eqCheck.rows[0].empresa;
       } else {
         return res.status(404).json({ error: 'Equipo no encontrado' });
+      }
+    } else {
+      const assignedEquipment = await pool.query(
+        'SELECT id, area, empresa FROM equipos WHERE empleado_id = $1 AND estado_id = 2 ORDER BY id ASC LIMIT 2',
+        [clientEmployeeId]
+      );
+      if (assignedEquipment.rows.length === 1) {
+        const equipment = assignedEquipment.rows[0];
+        resolvedEquipmentId = equipment.id;
+        if (!eqArea) eqArea = equipment.area;
+        if (!eqEmpresa) eqEmpresa = equipment.empresa;
       }
     }
 
@@ -161,7 +172,7 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
 
     const values = [
       folio,
-      equipo_id ? parseInt(equipo_id, 10) : null,
+      resolvedEquipmentId,
       eqEmpId ? parseInt(eqEmpId, 10) : null,
       clientEmployee.nombre,
       clientEmployee.email || (solicitante_email ? solicitante_email.trim() : null),
