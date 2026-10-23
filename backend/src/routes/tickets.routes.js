@@ -189,12 +189,6 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
 
     const result = await pool.query(query, values);
     const ticket = result.rows[0];
-    await pool.query(`
-      INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo)
-      SELECT u.id, $1, 'nuevo_ticket'
-      FROM usuarios u JOIN empleados e ON e.id = u.empleado_id
-      WHERE e.role = 'tecnico' AND e.estado = 'activo'
-    `, [ticket.id]);
     delete ticket.cliente_token_hash;
     res.status(201).json({
       message: 'Ticket creado exitosamente',
@@ -517,6 +511,15 @@ router.put('/:id/aprobar-asignar', authenticateToken, authorizeRoles('admin', 's
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Ticket no encontrado' });
     }
+
+    // El técnico recibe el aviso cuando la tarea ya le fue asignada. Avisar a
+    // todos al crear el reporte provocaba notificaciones sin una tarea visible
+    // en "Mis tareas", porque el ticket seguía en estado abierto.
+    await pool.query(
+      `INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo)
+       VALUES ($1, $2, 'ticket_asignado')`,
+      [finalTecnicoId, result.rows[0].id]
+    );
 
     res.json({
       message: 'Ticket aprobado y asignado correctamente',

@@ -78,6 +78,9 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
     try {
       await fetch('/api/tickets/tecnico/notificaciones/leidas', { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
       setNotifications((items) => items.map((item) => ({ ...item, leida: true })));
+      // La alerta significa que ya hay una tarea asignada: refrescar la
+      // bandeja evita que el técnico tenga que recargar manualmente la PWA.
+      await fetchMisTickets();
     } catch (err) { console.warn('Error al marcar notificaciones:', err); }
   };
 
@@ -283,7 +286,7 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
 
           <div className="flex items-center gap-2">
             {notifications.filter((item) => !item.leida).length > 0 && (
-              <button onClick={markNotificationsRead} className="relative p-1.5 bg-red-500/90 hover:bg-red-600 rounded-lg transition" title="Nuevos reportes de clientes">
+              <button onClick={markNotificationsRead} className="relative p-1.5 bg-red-500/90 hover:bg-red-600 rounded-lg transition" title="Nueva tarea asignada">
                 <Bell className="w-4 h-4" />
                 <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-white text-red-700 rounded-full text-[9px] leading-4 font-black">{notifications.filter((item) => !item.leida).length}</span>
               </button>

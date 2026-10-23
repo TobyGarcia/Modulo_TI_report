@@ -18,6 +18,7 @@ import TicketsManagementView from './components/TicketsManagementView';
 // PWAs
 import ClientPortal from './components/pwa/ClientPortal';
 import TechnicianPortal from './components/pwa/TechnicianPortal';
+import SupervisorPortal from './components/pwa/SupervisorPortal';
 
 // Assets
 import logoITZ from './assets/logotiposQR/ITZ.png';
@@ -313,6 +314,13 @@ export default function App() {
   // disponible sin requerir dominios ni aplicaciones separadas.
   if (user?.role === 'tecnico') {
     return <TechnicianPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // La ruta del supervisor conserva una bandeja operativa separada dentro de
+  // la misma PWA: aquí se revisan los reportes abiertos y se asignan al técnico.
+  // El panel general sigue siendo la vista predeterminada del administrador.
+  if (user?.role === 'admin' && window.location.pathname.toLowerCase().startsWith('/supervisor')) {
+    return <SupervisorPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }
 
   // Vista de Impresión de Etiquetas
