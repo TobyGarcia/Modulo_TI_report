@@ -4,7 +4,7 @@ import { Lock, User, KeyRound, AlertCircle, ShieldCheck, QrCode } from 'lucide-r
 import bgLogin from '../assets/backgrounLog/loginBackground.jpg';
 import logoITZ from '../assets/logotiposQR/ITZ.png';
 
-export default function LoginPage({ onLoginSuccess, onClientAccess, isScanAccess }) {
+export default function LoginPage({ onLoginSuccess, onClientAccess, staffLoginRole, isScanAccess }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -49,11 +49,15 @@ export default function LoginPage({ onLoginSuccess, onClientAccess, isScanAccess
           <div className="bg-white p-2.5 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md border border-[#c68a1d] max-w-[170px] h-16">
             <img src={logoITZ} alt="Logo ITZ" className="max-h-full max-w-full object-contain" />
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight">Sistema QR ITZ</h1>
+          <h1 className="text-xl font-extrabold tracking-tight">
+            {staffLoginRole === 'tecnico' ? 'Acceso Técnico TI' : staffLoginRole === 'admin' ? 'Acceso Administrador' : 'Sistema QR ITZ'}
+          </h1>
           <p className="text-xs text-[#e6b520] mt-1 font-mono font-medium">
             {isScanAccess
               ? 'Escaneo de QR Protegido - Se requiere credenciales de TI'
-              : 'Acceso único para Personal TI y Clientes'}
+              : staffLoginRole === 'tecnico' ? 'Atención y resolución de tickets asignados'
+                : staffLoginRole === 'admin' ? 'Supervisión, asignación y administración del sistema'
+                  : 'Acceso único para Personal TI y Clientes'}
           </p>
         </div>
 

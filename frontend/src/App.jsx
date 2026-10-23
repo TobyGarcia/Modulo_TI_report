@@ -98,6 +98,14 @@ export default function App() {
   const [showClientPortal, setShowClientPortal] = useState(() => {
     try { return window.location.pathname.toLowerCase().startsWith('/cliente'); } catch { return false; }
   });
+  const [staffLoginRole, setStaffLoginRole] = useState(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith('/tecnico')) return 'tecnico';
+      if (path.startsWith('/supervisor')) return 'admin';
+    } catch {}
+    return null;
+  });
   const [selectedEquipmentsToPrint, setSelectedEquipmentsToPrint] = useState([]);
   const [networkIp, setNetworkIp] = useState('');
   
@@ -118,6 +126,8 @@ export default function App() {
         // Enlaces antiguos: se conservan para no romper QR o favoritos, pero
         // normalizamos la URL a la instalación única.
         if (path.startsWith('/cliente')) setShowClientPortal(true);
+        if (path.startsWith('/tecnico')) setStaffLoginRole('tecnico');
+        if (path.startsWith('/supervisor')) setStaffLoginRole('admin');
         window.history.replaceState({}, '', '/');
       }
     } catch (e) {
@@ -200,7 +210,14 @@ export default function App() {
 
   // Cliente puede entrar con PIN desde la pantalla común o desde un QR.
   if (showClientPortal) {
-    return <ClientPortal initialEquipmentId={scanId} />;
+    return <ClientPortal
+      initialEquipmentId={scanId}
+      onStaffAccess={(role) => {
+        setShowClientPortal(false);
+        setStaffLoginRole(role);
+        window.history.replaceState({}, '', '/');
+      }}
+    />;
   }
 
   // ================= ESCANEO QR INTELIGENTE (/scan/:id) =================
@@ -285,7 +302,12 @@ export default function App() {
 
   // ================= ACCESO ÚNICO Y PANEL ADMINISTRATIVO =================
   if (!token) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} onClientAccess={() => setShowClientPortal(true)} isScanAccess={false} />;
+    return <LoginPage
+      onLoginSuccess={handleLoginSuccess}
+      onClientAccess={() => { setStaffLoginRole(null); setShowClientPortal(true); }}
+      staffLoginRole={staffLoginRole}
+      isScanAccess={false}
+    />;
   }
 
   // La instalación única de la PWA inicia aquí. El rol decide la experiencia

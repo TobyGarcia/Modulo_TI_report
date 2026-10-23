@@ -25,7 +25,7 @@ function saveTicketAccess(ticket, accessToken) {
   localStorage.setItem(CLIENT_TICKET_ACCESS_KEY, JSON.stringify(saved));
 }
 
-export default function ClientPortal({ initialEquipmentId }) {
+export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
   const [clientSession, setClientSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CLIENT_SESSION_KEY) || 'null'); } catch { return null; }
   });
@@ -261,7 +261,16 @@ export default function ClientPortal({ initialEquipmentId }) {
               <div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-600" /><input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" required autoFocus value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••••" className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-300 text-center tracking-[0.45em] font-bold outline-none focus:ring-2 focus:ring-blue-500" /></div>
             </div>
             <button type="submit" disabled={pinLoading} className="w-full py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-sm shadow">{pinLoading ? 'Validando...' : 'Entrar a Mesa de Ayuda'}</button>
-            <p className="text-[11px] text-center text-slate-500">Escanea primero el QR de tu equipo para levantar el reporte.</p>
+            <p className="text-[11px] text-center text-slate-500">El QR es opcional; sirve para identificar el equipo exacto.</p>
+            {onStaffAccess && (
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <p className="text-[11px] text-center font-semibold text-slate-600">¿Formas parte de TI?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => onStaffAccess('tecnico')} className="py-2 border border-amber-300 bg-amber-50 text-amber-800 rounded-xl text-xs font-bold hover:bg-amber-100">Entrar como Técnico</button>
+                  <button type="button" onClick={() => onStaffAccess('admin')} className="py-2 border border-emerald-300 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold hover:bg-emerald-100">Entrar como Administrador</button>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </div>
