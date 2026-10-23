@@ -4,7 +4,7 @@ import { Lock, User, KeyRound, AlertCircle, ShieldCheck, QrCode } from 'lucide-r
 import bgLogin from '../assets/backgrounLog/loginBackground.jpg';
 import logoITZ from '../assets/logotiposQR/ITZ.png';
 
-export default function LoginPage({ onLoginSuccess, isScanAccess }) {
+export default function LoginPage({ onLoginSuccess, onClientAccess, isScanAccess }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -49,11 +49,11 @@ export default function LoginPage({ onLoginSuccess, isScanAccess }) {
           <div className="bg-white p-2.5 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md border border-[#c68a1d] max-w-[170px] h-16">
             <img src={logoITZ} alt="Logo ITZ" className="max-h-full max-w-full object-contain" />
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight">Acceso Exclusivo TI</h1>
+          <h1 className="text-xl font-extrabold tracking-tight">Sistema QR ITZ</h1>
           <p className="text-xs text-[#e6b520] mt-1 font-mono font-medium">
             {isScanAccess
               ? 'Escaneo de QR Protegido - Se requiere credenciales de TI'
-              : 'Inventario & Control de Etiquetas QR'}
+              : 'Acceso único para Personal TI y Clientes'}
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export default function LoginPage({ onLoginSuccess, isScanAccess }) {
 
           <div>
             <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider mb-1.5">
-              Usuario de TI
+              Usuario
             </label>
             <div className="relative">
               <User className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -116,7 +116,7 @@ export default function LoginPage({ onLoginSuccess, isScanAccess }) {
             ) : (
               <>
                 <Lock className="w-4 h-4 text-black" />
-                <span>Autenticar y Ver Equipo</span>
+                <span>Ingresar al Sistema</span>
               </>
             )}
           </button>
@@ -126,6 +126,7 @@ export default function LoginPage({ onLoginSuccess, isScanAccess }) {
             <button
               type="button"
               onClick={() => {
+                if (onClientAccess) return onClientAccess();
                 const equipmentId = isScanAccess ? window.location.pathname.replace(/^\/scan\//i, '') : '';
                 window.location.href = equipmentId ? `/cliente?equipo=${encodeURIComponent(equipmentId)}` : '/cliente';
               }}

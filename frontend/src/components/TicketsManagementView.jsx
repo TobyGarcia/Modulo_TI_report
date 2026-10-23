@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Ticket, Search, Filter, Plus, RefreshCw, CheckCircle, Clock,
   AlertTriangle, UserCheck, Star, ExternalLink, QrCode, Download,
-  Eye, CheckSquare, XCircle, ChevronRight, User, Laptop, Smartphone, Wrench, ShieldCheck
+  Eye, CheckSquare, XCircle, ChevronRight, User, Laptop
 } from 'lucide-react';
 
 export default function TicketsManagementView({ token, currentUser }) {
@@ -67,42 +67,12 @@ export default function TicketsManagementView({ token, currentUser }) {
             <span>Mesa de Ayuda & Tickets de Mantenimiento</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Gestión centralizada del ciclo de vida de tickets, integrando las 3 PWAs (Cliente, Técnico y Supervisor)
+            Gestión centralizada del ciclo de vida de tickets desde una sola PWA basada en roles.
           </p>
         </div>
 
-        {/* Accesos directos a las 3 PWAs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href="/cliente"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-xs border border-blue-200 transition"
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>PWA Cliente</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-          <a
-            href="/tecnico"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs border border-amber-200 transition"
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            <span>PWA Técnico</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-          <a
-            href="/supervisor"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs border border-emerald-200 transition"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>PWA Supervisor</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
+        <div className="px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-800">
+          Acceso único: cada persona ve las opciones autorizadas por su rol.
         </div>
       </div>
 

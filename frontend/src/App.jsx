@@ -18,11 +18,10 @@ import TicketsManagementView from './components/TicketsManagementView';
 // PWAs
 import ClientPortal from './components/pwa/ClientPortal';
 import TechnicianPortal from './components/pwa/TechnicianPortal';
-import SupervisorPortal from './components/pwa/SupervisorPortal';
 
 // Assets
 import logoITZ from './assets/logotiposQR/ITZ.png';
-import { Wrench, ShieldCheck, Laptop, Lock, ArrowRight, User } from 'lucide-react';
+import { Wrench, ShieldCheck, Laptop, Lock, ArrowRight } from 'lucide-react';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -80,13 +79,11 @@ export default function App() {
     }
   });
 
-  // Detección inicial de la PWA o portal
+  // Sólo el escaneo QR conserva una ruta con contexto propio. Cliente, técnico
+  // y administrador entran por la misma PWA y la vista se decide por su rol.
   const [portalMode, setPortalMode] = useState(() => {
     try {
       const p = window.location.pathname.toLowerCase();
-      if (p.startsWith('/cliente')) return 'cliente';
-      if (p.startsWith('/tecnico')) return 'tecnico';
-      if (p.startsWith('/supervisor')) return 'supervisor';
       if (p.startsWith('/scan/')) return 'scan';
       return 'admin';
     } catch {
@@ -98,6 +95,9 @@ export default function App() {
   const [currentView, setCurrentView] = useState('main'); // 'main' | 'print'
   const [scanId, setScanId] = useState(null);
   const [showScanLogin, setShowScanLogin] = useState(false);
+  const [showClientPortal, setShowClientPortal] = useState(() => {
+    try { return window.location.pathname.toLowerCase().startsWith('/cliente'); } catch { return false; }
+  });
   const [selectedEquipmentsToPrint, setSelectedEquipmentsToPrint] = useState([]);
   const [networkIp, setNetworkIp] = useState('');
   
@@ -114,12 +114,11 @@ export default function App() {
           setScanId(id);
           setPortalMode('scan');
         }
-      } else if (path.startsWith('/cliente')) {
-        setPortalMode('cliente');
-      } else if (path.startsWith('/tecnico')) {
-        setPortalMode('tecnico');
-      } else if (path.startsWith('/supervisor')) {
-        setPortalMode('supervisor');
+      } else if (/^\/(cliente|tecnico|supervisor)(\/|$)/.test(path)) {
+        // Enlaces antiguos: se conservan para no romper QR o favoritos, pero
+        // normalizamos la URL a la instalación única.
+        if (path.startsWith('/cliente')) setShowClientPortal(true);
+        window.history.replaceState({}, '', '/');
       }
     } catch (e) {
       console.error('Error al detectar ruta:', e);
@@ -199,36 +198,12 @@ export default function App() {
     setCurrentView('print');
   };
 
-  // ================= 1. PWA CLIENTE (/cliente) =================
-  if (portalMode === 'cliente') {
+  // Cliente puede entrar con PIN desde la pantalla común o desde un QR.
+  if (showClientPortal) {
     return <ClientPortal initialEquipmentId={scanId} />;
   }
 
-  // ================= 2. PWA TÉCNICO (/tecnico) =================
-  if (portalMode === 'tecnico') {
-    return (
-      <TechnicianPortal
-        token={token}
-        currentUser={user}
-        onLogout={handleLogout}
-        onLoginSuccess={handleLoginSuccess}
-      />
-    );
-  }
-
-  // ================= 3. PWA SUPERVISOR (/supervisor) =================
-  if (portalMode === 'supervisor') {
-    return (
-      <SupervisorPortal
-        token={token}
-        currentUser={user}
-        onLogout={handleLogout}
-        onLoginSuccess={handleLoginSuccess}
-      />
-    );
-  }
-
-  // ================= 4. ESCANEO QR INTELIGENTE (/scan/:id) =================
+  // ================= ESCANEO QR INTELIGENTE (/scan/:id) =================
   if (portalMode === 'scan' && scanId) {
     // Si ya está autenticado con credenciales de TI, mostrar consola técnica directa
     if (token) {
@@ -252,7 +227,7 @@ export default function App() {
           >
             ← Volver
           </button>
-          <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={true} />
+          <LoginPage onLoginSuccess={handleLoginSuccess} onClientAccess={() => setShowClientPortal(true)} isScanAccess={true} />
         </div>
       );
     }
@@ -275,7 +250,7 @@ export default function App() {
           <div className="space-y-2.5 pt-2">
             {/* Opción 1: Empleado reporta falla */}
             <button
-              onClick={() => setPortalMode('cliente')}
+              onClick={() => setShowClientPortal(true)}
               className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-lg flex items-center justify-between transition group"
             >
               <div className="flex items-center gap-2">
@@ -308,9 +283,9 @@ export default function App() {
     );
   }
 
-  // ================= 5. PANEL GENERAL DE ADMINISTRACIÓN =================
+  // ================= ACCESO ÚNICO Y PANEL ADMINISTRATIVO =================
   if (!token) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} isScanAccess={false} />;
+    return <LoginPage onLoginSuccess={handleLoginSuccess} onClientAccess={() => setShowClientPortal(true)} isScanAccess={false} />;
   }
 
   // La instalación única de la PWA inicia aquí. El rol decide la experiencia
