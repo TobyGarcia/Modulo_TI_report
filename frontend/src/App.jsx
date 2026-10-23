@@ -123,12 +123,11 @@ export default function App() {
           setPortalMode('scan');
         }
       } else if (/^\/(cliente|tecnico|supervisor)(\/|$)/.test(path)) {
-        // Enlaces antiguos: se conservan para no romper QR o favoritos, pero
-        // normalizamos la URL a la instalación única.
+        // Accesos con contexto: siguen siendo una sola PWA (mismo manifest y
+        // service worker), pero la URL deja claro el tipo de inicio de sesión.
         if (path.startsWith('/cliente')) setShowClientPortal(true);
         if (path.startsWith('/tecnico')) setStaffLoginRole('tecnico');
         if (path.startsWith('/supervisor')) setStaffLoginRole('admin');
-        window.history.replaceState({}, '', '/');
       }
     } catch (e) {
       console.error('Error al detectar ruta:', e);
@@ -215,7 +214,7 @@ export default function App() {
       onStaffAccess={(role) => {
         setShowClientPortal(false);
         setStaffLoginRole(role);
-        window.history.replaceState({}, '', '/');
+        window.history.pushState({}, '', role === 'tecnico' ? '/tecnico' : '/supervisor');
       }}
     />;
   }
