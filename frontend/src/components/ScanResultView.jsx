@@ -11,7 +11,7 @@ import UnassignmentModal from './UnassignmentModal';
 import BajaModal from './BajaModal';
 import { generarReportePDF, generarFormatoAsignacionPDF, generarFormatoDesasignacionPDF, generarFormatoBajaPDF } from '../utils/pdfGenerator';
 
-export default function ScanResultView({ equipmentId, token, onLogout, currentUser }) {
+export default function ScanResultView({ equipmentId, token, onLogout, currentUser, onBack }) {
   const [equipo, setEquipo] = useState(null);
   const [historialMantenimientos, setHistorialMantenimientos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -206,7 +206,17 @@ export default function ScanResultView({ equipmentId, token, onLogout, currentUs
       {/* Botón superior de Cerrar Sesión */}
       {onLogout && (
         <div className="flex justify-between items-center text-xs">
-          <span className="text-gray-500 font-semibold uppercase tracking-wider">Acceso Técnico TI</span>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-2.5 py-1 bg-white text-indigo-700 hover:text-indigo-900 rounded-lg border font-semibold shadow-sm"
+              >
+                ← Volver al ticket
+              </button>
+            )}
+            <span className="text-gray-500 font-semibold uppercase tracking-wider">Acceso Técnico TI</span>
+          </div>
           <button
             onClick={onLogout}
             className="flex items-center space-x-1 text-red-600 hover:text-red-700 bg-white px-2.5 py-1 rounded-lg border font-semibold shadow-sm"

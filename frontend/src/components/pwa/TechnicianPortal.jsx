@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
 import SignatureCanvas from '../SignatureCanvas';
+import ScanResultView from '../ScanResultView';
 
 export default function TechnicianPortal({ token, currentUser, onLogout, onLoginSuccess }) {
   const [activeTab, setActiveTab] = useState('tickets'); // 'tickets' | 'insumos'
@@ -22,6 +23,7 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
 
   // Modal para resolver ticket
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [ticketWithEquipmentOpen, setTicketWithEquipmentOpen] = useState(null);
   const [diagnostico, setDiagnostico] = useState('');
   const [trabajoRealizado, setTrabajoRealizado] = useState('');
   const [insumosConsumidos, setInsumosConsumidos] = useState([]); // [{ insumo_id, cantidad }]
@@ -261,6 +263,20 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
     );
   }
 
+  // La ficha operativa del equipo es la misma que recibe el técnico al
+  // escanear el QR: conserva todas las acciones de mantenimiento y resguardo.
+  if (ticketWithEquipmentOpen?.equipo_id) {
+    return (
+      <ScanResultView
+        equipmentId={ticketWithEquipmentOpen.equipo_id}
+        token={token}
+        currentUser={currentUser}
+        onLogout={onLogout}
+        onBack={() => setTicketWithEquipmentOpen(null)}
+      />
+    );
+  }
+
   // 2. Vista principal del técnico autenticado
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 pb-16">
@@ -403,12 +419,13 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
                           <span className="font-semibold text-slate-800">{tck.marca} {tck.modelo}</span>
                           <span className="text-[11px] text-slate-500 font-mono ml-2">S/N: {tck.serial}</span>
                         </div>
-                        <a
-                          href={`/scan/${tck.equipo_id}`}
+                        <button
+                          type="button"
+                          onClick={() => setTicketWithEquipmentOpen(tck)}
                           className="text-[10px] font-bold text-amber-600 hover:text-amber-700 underline"
                         >
-                          Ver Historial
-                        </a>
+                          Abrir ficha operativa
+                        </button>
                       </div>
                     )}
 
