@@ -586,13 +586,19 @@ export default function EquipmentList({
                         <div className="text-gray-400">{eq.ram_capacidad} RAM | {eq.disco_capacidad}</div>
                       </td>
                       <td className="p-4 space-y-1">
+                        {(() => {
+                          const hasAssignedPerson = Boolean(eq.empleado_id || (eq.personal_asignado && !['no asignado', 'sin asignar', 'resguardo'].includes(eq.personal_asignado.trim().toLowerCase())));
+                          const displayStatus = hasAssignedPerson && eq.estado_nombre === 'Resguardo' ? 'Asignado' : (eq.estado_nombre || (hasAssignedPerson ? 'Asignado' : 'Resguardo'));
+                          return <>
                         <span className={`inline-block px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-md ${
-                          eq.estado_nombre === 'Asignado' || eq.empleado_id
+                          displayStatus === 'Asignado'
                             ? 'bg-indigo-100 text-indigo-800'
                             : 'bg-emerald-100 text-emerald-800'
                         }`}>
-                          {eq.estado_nombre || (eq.empleado_id ? 'Asignado' : 'Resguardo')}
+                          {displayStatus}
                         </span>
+                          </>;
+                        })()}
                         <div className="text-[11px] text-gray-500">{eq.estado_fisico || 'Excelente'}</div>
                       </td>
                       <td className="p-4 text-center">

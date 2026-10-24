@@ -641,6 +641,19 @@ async function initDatabase() {
         AND LOWER(TRIM(e.personal_asignado)) = LOWER(TRIM(emp.nombre));
     `);
 
+    // Reparar registros anteriores que ya tienen responsable, pero conservan
+    // erróneamente el estado de Resguardo. No se modifica Mantenimiento o Baja.
+    await pool.query(`
+      UPDATE equipos
+      SET estado_id = 2
+      WHERE estado_id = 1
+        AND (
+          empleado_id IS NOT NULL OR
+          (personal_asignado IS NOT NULL AND TRIM(personal_asignado) != ''
+            AND LOWER(TRIM(personal_asignado)) NOT IN ('no asignado', 'sin asignar', 'resguardo'))
+        );
+    `);
+
     // Equipos sin empleado asignado pasan a estado 'Resguardo' (1)
     await pool.query(`
       UPDATE equipos

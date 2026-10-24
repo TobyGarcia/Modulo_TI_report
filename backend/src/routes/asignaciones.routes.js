@@ -89,6 +89,16 @@ async function ensureTablesExist(dbClient) {
       FROM asignaciones a
       WHERE NOT EXISTS (SELECT 1 FROM historial_asignaciones h WHERE h.equipo_id = a.equipo_id AND h.fecha_movimiento = a.fecha_movimiento);
     `);
+
+    // Mantener coherente el estado para inventario legado que ya tenía un
+    // responsable capturado antes de usar el flujo de asignaciones.
+    await dbClient.query(`
+      UPDATE equipos
+      SET estado_id = 2
+      WHERE estado_id = 1
+        AND (empleado_id IS NOT NULL OR (personal_asignado IS NOT NULL AND TRIM(personal_asignado) != ''
+          AND LOWER(TRIM(personal_asignado)) NOT IN ('no asignado', 'sin asignar', 'resguardo')));
+    `);
   } catch (e) {
     console.error('Error al verificar tablas de asignaciones en la base de datos:', e);
   }
