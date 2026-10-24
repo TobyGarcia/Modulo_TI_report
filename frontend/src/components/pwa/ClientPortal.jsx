@@ -204,19 +204,16 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
 
   // Consultar mis tickets
   const fetchMisTickets = async () => {
-    const ticketAccess = getStoredTicketAccess();
-    const entries = Object.entries(ticketAccess);
     setBuscandoTickets(true);
     try {
-      const tickets = await Promise.all(entries.map(async ([folio, accessToken]) => {
-        const res = await fetch(`/api/tickets/cliente?folio=${encodeURIComponent(folio)}&access_token=${encodeURIComponent(accessToken)}`);
-        if (!res.ok) return null;
-        const ticket = await res.json();
-        return { ...ticket, access_token: accessToken };
-      }));
-      setMisTickets(tickets.filter(Boolean).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      const res = await fetch('/api/tickets/cliente/mis-tickets', {
+        headers: { Authorization: `Bearer ${clientSession?.token}` }
+      });
+      if (!res.ok) throw new Error('No fue posible consultar tus tickets');
+      setMisTickets(await res.json());
     } catch (err) {
       console.error('Error al buscar tickets:', err);
+      setMisTickets([]);
     } finally {
       setBuscandoTickets(false);
     }
@@ -226,13 +223,15 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
   const handleCalificarTicket = async () => {
     if (!ticketParaCalificar) return;
     try {
-      const res = await fetch(`/api/tickets/${ticketParaCalificar.id}/calificar`, {
+      const res = await fetch(`/api/tickets/cliente/${ticketParaCalificar.id}/calificar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${clientSession?.token}`
+        },
         body: JSON.stringify({
           calificacion: rating,
-          comentarios_cierre: comentariosCalificacion,
-          access_token: ticketParaCalificar.access_token
+          comentarios_cierre: comentariosCalificacion
         })
       });
       if (res.ok) {
@@ -645,7 +644,7 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
             {misTickets.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center text-slate-400 space-y-2 border border-slate-200">
                 <Clock className="w-8 h-8 mx-auto text-slate-300" />
-                  <p className="text-xs">No hay tickets guardados en este dispositivo.</p>
+                  <p className="text-xs">No tienes tickets registrados.</p>
               </div>
             ) : (
               <div className="space-y-3">

@@ -254,6 +254,32 @@ router.get('/stats/resumen', authenticateToken, authorizeRoles('admin', 'supervi
 });
 
 // 3. Listar tickets del cliente (sin requerir token de TI, buscando por email, folio o equipo)
+// La PWA consulta por la identidad de la sesión, no por los datos guardados en
+// un teléfono. Así el cliente ve sus solicitudes desde cualquier dispositivo.
+router.get('/cliente/mis-tickets', authenticateToken, authorizeRoles('cliente'), async (req, res) => {
+  try {
+    const employeeId = parseInt(req.user.empleado_id, 10);
+    if (!employeeId) return res.status(403).json({ error: 'La cuenta de cliente no está vinculada a un empleado' });
+
+    const result = await pool.query(`
+      SELECT
+        t.id, t.folio, t.tipo_servicio, t.categoria_falla, t.descripcion_problema,
+        t.prioridad, t.estado, t.tecnico_nombre, t.fecha_programada_atencion,
+        t.fecha_inicio_atencion, t.fecha_resolucion, t.motivo_rechazo,
+        t.diagnostico_tecnico, t.calificacion_servicio, t.comentarios_cierre, t.created_at,
+        e.hostname, e.serial, e.marca, e.modelo
+      FROM tickets_mantenimiento t
+      LEFT JOIN equipos e ON t.equipo_id = e.id
+      WHERE t.empleado_id = $1
+      ORDER BY t.created_at DESC
+    `, [employeeId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al consultar los tickets del cliente:', err);
+    res.status(500).json({ error: 'Error al consultar tus tickets' });
+  }
+});
+
 router.get('/cliente', publicTicketReadRateLimit, async (req, res) => {
   try {
     const { folio, access_token: accessToken } = req.query;
@@ -281,6 +307,32 @@ router.get('/cliente', publicTicketReadRateLimit, async (req, res) => {
   } catch (err) {
     console.error('Error al consultar tickets de cliente:', err);
     res.status(500).json({ error: 'Error al buscar tickets' });
+  }
+});
+
+// El cliente autenticado puede calificar solicitudes propias aun si las creó
+// desde otro teléfono y no conserva el código privado local.
+router.post('/cliente/:id/calificar', authenticateToken, authorizeRoles('cliente'), async (req, res) => {
+  try {
+    const employeeId = parseInt(req.user.empleado_id, 10);
+    const califNum = parseInt(req.body.calificacion, 10);
+    if (!employeeId) return res.status(403).json({ error: 'La cuenta de cliente no está vinculada a un empleado' });
+    if (isNaN(califNum) || califNum < 1 || califNum > 5) {
+      return res.status(400).json({ error: 'La calificación debe ser un valor del 1 al 5' });
+    }
+
+    const result = await pool.query(`
+      UPDATE tickets_mantenimiento
+      SET calificacion_servicio = $1, comentarios_cierre = $2, estado = 'cerrado', updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3 AND empleado_id = $4
+      RETURNING *
+    `, [califNum, req.body.comentarios_cierre ? req.body.comentarios_cierre.trim() : null, parseInt(req.params.id, 10), employeeId]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Ticket no encontrado' });
+    res.json({ message: '¡Muchas gracias! Tu calificación y comentarios han sido registrados.', ticket: result.rows[0] });
+  } catch (err) {
+    console.error('Error al calificar ticket de cliente:', err);
+    res.status(500).json({ error: 'Error al registrar calificación' });
   }
 });
 
