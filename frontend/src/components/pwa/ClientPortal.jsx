@@ -34,6 +34,7 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
   const [pinLoading, setPinLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('reportar'); // 'reportar' | 'mis_reportes'
   const [selectedEquipo, setSelectedEquipo] = useState(null);
+  const [assignedEquipments, setAssignedEquipments] = useState([]);
 
   // Formulario
   const [solicitanteNombre, setSolicitanteNombre] = useState('');
@@ -88,6 +89,22 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
       if (savedName) setSolicitanteNombre(savedName);
     } catch (e) {}
   }, [initialEquipmentId]);
+
+  // Sin QR, precargar los equipos que TI tiene asignados a la persona que
+  // ingresó con PIN. El QR conserva prioridad al identificar un equipo puntual.
+  useEffect(() => {
+    if (!clientSession?.token || initialEquipmentId || new URLSearchParams(window.location.search).get('equipo')) return;
+    fetch('/api/equipos/mis-asignados', {
+      headers: { Authorization: `Bearer ${clientSession.token}` }
+    })
+      .then((res) => res.ok ? res.json() : [])
+      .then((equipments) => {
+        const list = Array.isArray(equipments) ? equipments : [];
+        setAssignedEquipments(list);
+        if (list.length) setSelectedEquipo(list[0]);
+      })
+      .catch(() => setAssignedEquipments([]));
+  }, [clientSession?.token, initialEquipmentId]);
 
   useEffect(() => {
     if (!clientSession?.user) return;
@@ -414,26 +431,39 @@ export default function ClientPortal({ initialEquipmentId, onStaffAccess }) {
                   </div>
 
                   {selectedEquipo ? (
-                    <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-start justify-between">
-                      <div className="space-y-1 text-xs">
-                        <div className="font-extrabold text-blue-900 text-sm">
-                          {selectedEquipo.marca} {selectedEquipo.modelo}
-                        </div>
-                        <div className="text-slate-600 font-mono">
-                          Serie: <span className="font-semibold text-slate-800">{selectedEquipo.serial}</span>
-                        </div>
-                        {selectedEquipo.hostname && (
-                          <div className="text-slate-600">
-                            Hostname: <span className="font-semibold text-slate-800">{selectedEquipo.hostname}</span>
+                    <div className="space-y-2">
+                      <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-start justify-between">
+                        <div className="space-y-1 text-xs">
+                          <div className="font-extrabold text-blue-900 text-sm">
+                            {selectedEquipo.marca} {selectedEquipo.modelo}
                           </div>
-                        )}
-                        <div className="text-slate-500 text-[11px]">
-                          Asignado a: {selectedEquipo.personal_asignado || 'Sin asignar'} ({selectedEquipo.area || 'General'})
+                          <div className="text-slate-600 font-mono">
+                            Serie: <span className="font-semibold text-slate-800">{selectedEquipo.serial}</span>
+                          </div>
+                          {selectedEquipo.hostname && (
+                            <div className="text-slate-600">
+                              Hostname: <span className="font-semibold text-slate-800">{selectedEquipo.hostname}</span>
+                            </div>
+                          )}
+                          <div className="text-slate-500 text-[11px]">
+                            Asignado a: {selectedEquipo.empleado_nombre || selectedEquipo.personal_asignado || clientSession?.user?.nombre || 'Sin asignar'} ({selectedEquipo.area || 'General'})
+                          </div>
+                        </div>
+                        <div className="bg-blue-600 text-white p-2 rounded-xl">
+                          <CheckCircle className="w-5 h-5" />
                         </div>
                       </div>
-                      <div className="bg-blue-600 text-white p-2 rounded-xl">
-                        <CheckCircle className="w-5 h-5" />
-                      </div>
+                      {assignedEquipments.length > 1 && (
+                        <select
+                          value={selectedEquipo.id}
+                          onChange={(e) => setSelectedEquipo(assignedEquipments.find((equipment) => equipment.id === Number(e.target.value)) || selectedEquipo)}
+                          className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs font-semibold text-slate-700"
+                        >
+                          {assignedEquipments.map((equipment) => (
+                            <option key={equipment.id} value={equipment.id}>{equipment.hostname || `${equipment.marca || 'Equipo'} ${equipment.modelo || ''}`} — {equipment.serial || 'Sin serie'}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">

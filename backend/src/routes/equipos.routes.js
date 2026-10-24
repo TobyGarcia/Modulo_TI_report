@@ -208,6 +208,30 @@ router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnic
   }
 });
 
+// Equipos asignados al empleado que inició sesión en la PWA de cliente.
+// Esta ruta sólo expone los activos propios del cliente autenticado.
+router.get('/mis-asignados', authenticateToken, authorizeRoles('cliente'), async (req, res) => {
+  try {
+    const employeeId = parseInt(req.user.empleado_id, 10);
+    if (!employeeId) return res.status(403).json({ error: 'La cuenta de cliente no está vinculada a un empleado' });
+
+    const result = await pool.query(`
+      SELECT e.*, emp.nombre AS empleado_nombre, st.nombre AS estado_nombre,
+             te.nombre AS tipo_equipo_nombre
+      FROM equipos e
+      JOIN empleados emp ON emp.id = e.empleado_id
+      LEFT JOIN estados_equipo st ON st.id = e.estado_id
+      LEFT JOIN tipos_equipo te ON te.id = e.tipo_equipo_id
+      WHERE e.empleado_id = $1 AND (e.estado_id IS NULL OR e.estado_id != 4)
+      ORDER BY e.updated_at DESC, e.id DESC
+    `, [employeeId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener los equipos asignados del cliente:', err);
+    res.status(500).json({ error: 'No fue posible consultar los equipos asignados' });
+  }
+});
+
 // Obtener un equipo por ID o Serial (Protegido: Requiere login de TI)
 router.get('/:identifier', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
