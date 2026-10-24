@@ -77,7 +77,10 @@ function parseCsv(text) {
 const normalizeHeader = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
 // Listar empleados (Protegido)
-router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+// El personal técnico necesita consultar el directorio para asignar o reasignar
+// un equipo desde la ficha abierta mediante QR. La administración del directorio
+// sigue siendo exclusiva de administradores.
+router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { q } = req.query;
     let query = `

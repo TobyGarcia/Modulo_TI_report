@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../config/db');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
@@ -95,7 +95,7 @@ async function ensureTablesExist(dbClient) {
 }
 
 // Asignar equipo a un empleado (Protegido)
-router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
+router.post('/equipos/:id/asignar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
@@ -199,7 +199,7 @@ router.post('/equipos/:id/asignar', authenticateToken, async (req, res) => {
 });
 
 // Desasignar equipo (Pasar a Resguardo) (Protegido)
-router.post('/equipos/:id/desasignar', authenticateToken, async (req, res) => {
+router.post('/equipos/:id/desasignar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
@@ -292,7 +292,7 @@ router.post('/equipos/:id/desasignar', authenticateToken, async (req, res) => {
 });
 
 // Reasignar equipo (Desasignar de A y Asignar a B en una sola operación) (Protegido)
-router.post('/equipos/:id/reasignar', authenticateToken, async (req, res) => {
+router.post('/equipos/:id/reasignar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
@@ -462,7 +462,7 @@ router.get('/historial', authenticateToken, async (req, res) => {
 });
 
 // Obtener el historial de asignaciones de un equipo (Protegido)
-router.get('/equipos/:id/historial-asignaciones', authenticateToken, async (req, res) => {
+router.get('/equipos/:id/historial-asignaciones', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { id } = req.params;
     await ensureTablesExist(pool);

@@ -54,7 +54,7 @@ const upload = multer({
 // --- Rutas del Sistema ---
 
 // Obtener la IP local de la máquina
-router.get('/info/network-ip', authenticateToken, (req, res) => {
+router.get('/info/network-ip', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), (req, res) => {
   const localIp = getLocalIpAddress();
   res.json({ ip: localIp, port: 5173 });
 });
@@ -137,7 +137,7 @@ router.get('/public/:id', async (req, res) => {
 // --- Rutas Protegidas (Exclusivas para Personal de TI Autenticado) ---
 
 // Listar equipos con opción de búsqueda y filtro por estado y catálogos (Protegido)
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { q, estado_id, tipo_equipo_id, empresa, ciudad, area, incluir_bajas } = req.query;
     let query = `
@@ -209,7 +209,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Obtener un equipo por ID o Serial (Protegido: Requiere login de TI)
-router.get('/:identifier', authenticateToken, async (req, res) => {
+router.get('/:identifier', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { identifier } = req.params;
     let result;
@@ -243,7 +243,7 @@ router.get('/:identifier', authenticateToken, async (req, res) => {
 });
 
 // Generar código QR para un equipo (Protegido)
-router.get('/:id/qr', authenticateToken, async (req, res) => {
+router.get('/:id/qr', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { id } = req.params;
     const { host } = req.query;
@@ -266,7 +266,7 @@ router.get('/:id/qr', authenticateToken, async (req, res) => {
 });
 
 // Crear nuevo equipo (Protegido)
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
@@ -434,7 +434,7 @@ router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'),
 });
 
 // Editar equipo (Protegido)
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -515,7 +515,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Eliminar equipo (Protegido)
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query('DELETE FROM equipos WHERE id = $1 RETURNING *', [id]);

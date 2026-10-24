@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../config/db');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
@@ -22,7 +22,7 @@ function calcularProximaFecha6Meses(fechaBase) {
 }
 
 // Listar mantenimientos con opción de filtrado (Protegido)
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { equipo_id, estado, tipo_mantenimiento, q } = req.query;
     let query = `
@@ -116,7 +116,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Obtener mantenimientos por equipo especifico
-router.get('/equipo/:equipoId', authenticateToken, async (req, res) => {
+router.get('/equipo/:equipoId', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { equipoId } = req.params;
     const query = `
@@ -140,7 +140,7 @@ router.get('/equipo/:equipoId', authenticateToken, async (req, res) => {
 });
 
 // Obtener un registro de mantenimiento por ID
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { id } = req.params;
     const query = `
@@ -192,7 +192,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Programar mantenimiento futuro (Estado: 'programado')
-router.post('/programar', authenticateToken, async (req, res) => {
+router.post('/programar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const {
       equipo_id,
@@ -235,7 +235,7 @@ router.post('/programar', authenticateToken, async (req, res) => {
 });
 
 // Levantar reporte de mantenimiento completado (Estado: 'completado')
-router.post('/reporte', authenticateToken, async (req, res) => {
+router.post('/reporte', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const {
       id, // Opcional: Si se está completando una programación existente
@@ -450,7 +450,7 @@ router.post('/reporte', authenticateToken, async (req, res) => {
 });
 
 // Editar un mantenimiento por ID
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -582,7 +582,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Eliminar un mantenimiento por ID
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query('DELETE FROM mantenimientos WHERE id = $1 RETURNING *', [parseInt(id, 10)]);

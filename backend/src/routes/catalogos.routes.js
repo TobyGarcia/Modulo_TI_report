@@ -7,10 +7,9 @@ const router = express.Router();
 
 // Todas las rutas de catálogos requieren autenticación previa
 router.use(authenticateToken);
-router.use(authorizeRoles('admin'));
 
 // Obtener todos los catálogos en un solo llamado
-router.get('/', async (req, res) => {
+router.get('/', authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
     const tipos = await pool.query(`
       SELECT t.*, COALESCE((
@@ -35,6 +34,9 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Error al consultar los catálogos' });
   }
 });
+
+// La edición de catálogos continúa limitada a la administración.
+router.use(authorizeRoles('admin'));
 
 // --- CRUD TIPOS DE EQUIPO ---
 
