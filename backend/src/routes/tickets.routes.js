@@ -710,9 +710,16 @@ router.post('/:id/resolver', authenticateToken, authorizeRoles('admin', 'supervi
     }
     const ticket = tckRes.rows[0];
 
-    // 2. Si el ticket tiene un equipo_id, crear el registro oficial en 'mantenimientos'
+    // Un ticket sólo puede cerrarse con su reporte de mantenimiento y el
+    // equipo intervenido identificado. Esto conserva la trazabilidad SGI.
+    if (!ticket.equipo_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Vincula el equipo al ticket antes de completar el reporte de mantenimiento' });
+    }
+
+    // 2. Crear el registro oficial en 'mantenimientos'.
     let mantenimientoId = null;
-    if (ticket.equipo_id) {
+    {
       const mantInsert = `
         INSERT INTO mantenimientos (
           equipo_id,

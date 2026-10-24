@@ -7,6 +7,8 @@ import {
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
 import SignatureCanvas from '../SignatureCanvas';
 import ScanResultView from '../ScanResultView';
+import MaintenanceReportModal from '../MaintenanceReportModal';
+import { generarReportePDF } from '../../utils/pdfGenerator';
 
 export default function TechnicianPortal({ token, currentUser, onLogout, onLoginSuccess }) {
   const [activeTab, setActiveTab] = useState('tickets'); // 'tickets' | 'insumos'
@@ -27,6 +29,8 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
   const [ticketToLinkEquipment, setTicketToLinkEquipment] = useState(null);
   const [equipmentCandidates, setEquipmentCandidates] = useState([]);
   const [linkingEquipment, setLinkingEquipment] = useState(false);
+  const [ticketReportContext, setTicketReportContext] = useState(null);
+  const [savingTicketReport, setSavingTicketReport] = useState(false);
   const [diagnostico, setDiagnostico] = useState('');
   const [trabajoRealizado, setTrabajoRealizado] = useState('');
   const [insumosConsumidos, setInsumosConsumidos] = useState([]); // [{ insumo_id, cantidad }]
@@ -183,6 +187,60 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
     setTicketWithEquipmentOpen(ticketWithEquipment);
   };
 
+  const openTicketReport = async (ticket) => {
+    try {
+      const res = await fetch(`/api/equipos/${ticket.equipo_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No fue posible cargar el equipo del ticket');
+      setTicketWithEquipmentOpen(null);
+      setTicketReportContext({ ticket, equipment: await res.json() });
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleSaveTicketReport = async (reportData) => {
+    if (!ticketReportContext) return;
+    setSavingTicketReport(true);
+    try {
+      const { ticket, equipment } = ticketReportContext;
+      const res = await fetch(`/api/tickets/${ticket.id}/resolver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          diagnostico_tecnico: reportData.observaciones_equipo || reportData.trabajo_realizado,
+          trabajo_realizado: reportData.trabajo_realizado,
+          material_utilizado: reportData.material_utilizado,
+          insumos_consumidos: reportData.insumos_usados || [],
+          firma_tecnico: reportData.firma_tecnico,
+          firma_responsable: reportData.firma_responsable,
+          imagenes_evidencia: reportData.imagenes_evidencia || [],
+          obs_procesador: reportData.obs_procesador,
+          obs_ram: reportData.obs_ram,
+          obs_storage: reportData.obs_storage,
+          obs_cargador: reportData.obs_cargador
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No fue posible completar el ticket');
+
+      // El ticket termina con su registro SGI y se descarga de inmediato el R2PTI1.
+      const reportRes = await fetch(`/api/mantenimientos/${data.mantenimiento_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (reportRes.ok) generarReportePDF(await reportRes.json(), equipment);
+
+      alert('Ticket resuelto y reporte de mantenimiento R2PTI1 generado.');
+      setTicketReportContext(null);
+      fetchMisTickets();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingTicketReport(false);
+    }
+  };
+
   // Agregar insumo al carrito de consumo
   const handleAddInsumo = () => {
     if (!insumoSeleccionado) return;
@@ -322,12 +380,7 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
         onLogout={onLogout}
         onBack={() => setTicketWithEquipmentOpen(null)}
         ticketFolio={ticketWithEquipmentOpen.folio}
-        onResolveTicket={() => {
-          const ticket = ticketWithEquipmentOpen;
-          setTicketWithEquipmentOpen(null);
-          setSelectedTicket(ticket);
-          setTrabajoRealizado(`Reparación realizada para reporte: ${ticket.descripcion_problema}`);
-        }}
+        onResolveTicket={() => openTicketReport(ticketWithEquipmentOpen)}
       />
     );
   }
@@ -727,6 +780,14 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
             </div>
           </div>
         )}
+
+        <MaintenanceReportModal
+          isOpen={!!ticketReportContext}
+          onClose={() => !savingTicketReport && setTicketReportContext(null)}
+          onSave={handleSaveTicketReport}
+          equipment={ticketReportContext?.equipment || null}
+          currentUser={currentUser}
+        />
       </main>
     </div>
   );
