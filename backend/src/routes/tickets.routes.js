@@ -408,6 +408,35 @@ router.get('/tecnico/mis-tickets', authenticateToken, authorizeRoles('admin', 's
   }
 });
 
+// Vincula un ticket al equipo seleccionado por el técnico antes de atenderlo.
+// Si el reporte pertenece a un empleado, el equipo debe estar bajo su resguardo.
+router.put('/:id/vincular-equipo', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), requireAssignedTechnician, async (req, res) => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    const equipmentId = parseInt(req.body?.equipo_id, 10);
+    if (!ticketId || !equipmentId) return res.status(400).json({ error: 'Selecciona un equipo válido' });
+
+    const ticketResult = await pool.query('SELECT id, empleado_id FROM tickets_mantenimiento WHERE id = $1', [ticketId]);
+    const equipmentResult = await pool.query('SELECT id, empleado_id FROM equipos WHERE id = $1 AND (estado_id IS NULL OR estado_id != 4)', [equipmentId]);
+    if (!ticketResult.rows.length || !equipmentResult.rows.length) return res.status(404).json({ error: 'Ticket o equipo no encontrado' });
+
+    const ticket = ticketResult.rows[0];
+    const equipment = equipmentResult.rows[0];
+    if (ticket.empleado_id && ticket.empleado_id !== equipment.empleado_id) {
+      return res.status(403).json({ error: 'El equipo seleccionado no está asignado al solicitante del ticket' });
+    }
+
+    const result = await pool.query(
+      'UPDATE tickets_mantenimiento SET equipo_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [equipmentId, ticketId]
+    );
+    res.json({ message: 'Equipo vinculado al ticket', ticket: result.rows[0] });
+  } catch (err) {
+    console.error('Error al vincular equipo al ticket:', err);
+    res.status(500).json({ error: 'No fue posible vincular el equipo al ticket' });
+  }
+});
+
 // 6. Listado general de tickets con filtros (Consola Supervisor / Admin)
 router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {

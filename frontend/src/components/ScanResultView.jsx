@@ -11,7 +11,7 @@ import UnassignmentModal from './UnassignmentModal';
 import BajaModal from './BajaModal';
 import { generarReportePDF, generarFormatoAsignacionPDF, generarFormatoDesasignacionPDF, generarFormatoBajaPDF } from '../utils/pdfGenerator';
 
-export default function ScanResultView({ equipmentId, token, onLogout, currentUser, onBack }) {
+export default function ScanResultView({ equipmentId, token, onLogout, currentUser, onBack, onResolveTicket, ticketFolio }) {
   const [equipo, setEquipo] = useState(null);
   const [historialMantenimientos, setHistorialMantenimientos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -360,6 +360,16 @@ export default function ScanResultView({ equipmentId, token, onLogout, currentUs
                 <span>Reporte</span>
               </button>
             </div>
+
+            {onResolveTicket && (
+              <button
+                onClick={onResolveTicket}
+                className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-2 transition-all"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Completar ticket {ticketFolio || ''}</span>
+              </button>
+            )}
 
             {/* Botón Prominente de Baja de Equipos */}
             <button

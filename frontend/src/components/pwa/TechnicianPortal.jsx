@@ -24,6 +24,9 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
   // Modal para resolver ticket
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketWithEquipmentOpen, setTicketWithEquipmentOpen] = useState(null);
+  const [ticketToLinkEquipment, setTicketToLinkEquipment] = useState(null);
+  const [equipmentCandidates, setEquipmentCandidates] = useState([]);
+  const [linkingEquipment, setLinkingEquipment] = useState(false);
   const [diagnostico, setDiagnostico] = useState('');
   const [trabajoRealizado, setTrabajoRealizado] = useState('');
   const [insumosConsumidos, setInsumosConsumidos] = useState([]); // [{ insumo_id, cantidad }]
@@ -133,6 +136,51 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
     } catch (err) {
       alert('Error al iniciar atención');
     }
+  };
+
+  const openOperationalEquipment = async (ticket) => {
+    if (ticket.equipo_id) {
+      setTicketWithEquipmentOpen(ticket);
+      return;
+    }
+
+    setLinkingEquipment(true);
+    try {
+      const res = await fetch(`/api/equipos?q=${encodeURIComponent(ticket.solicitante_nombre || '')}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No fue posible buscar equipos');
+      const candidates = await res.json();
+      const assignedToRequester = candidates.filter((equipment) => !ticket.empleado_id || Number(equipment.empleado_id) === Number(ticket.empleado_id));
+      if (!assignedToRequester.length) {
+        throw new Error('No hay equipo asignado a este solicitante. Escanea o asigna primero el QR del equipo.');
+      }
+      if (assignedToRequester.length === 1) {
+        await linkEquipmentToTicket(ticket, assignedToRequester[0]);
+      } else {
+        setEquipmentCandidates(assignedToRequester);
+        setTicketToLinkEquipment(ticket);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLinkingEquipment(false);
+    }
+  };
+
+  const linkEquipmentToTicket = async (ticket, equipment) => {
+    const res = await fetch(`/api/tickets/${ticket.id}/vincular-equipo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ equipo_id: equipment.id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No fue posible vincular el equipo');
+    const ticketWithEquipment = { ...ticket, equipo_id: equipment.id, ...equipment };
+    setTickets((items) => items.map((item) => item.id === ticket.id ? ticketWithEquipment : item));
+    setTicketToLinkEquipment(null);
+    setEquipmentCandidates([]);
+    setTicketWithEquipmentOpen(ticketWithEquipment);
   };
 
   // Agregar insumo al carrito de consumo
@@ -273,6 +321,13 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
         currentUser={currentUser}
         onLogout={onLogout}
         onBack={() => setTicketWithEquipmentOpen(null)}
+        ticketFolio={ticketWithEquipmentOpen.folio}
+        onResolveTicket={() => {
+          const ticket = ticketWithEquipmentOpen;
+          setTicketWithEquipmentOpen(null);
+          setSelectedTicket(ticket);
+          setTrabajoRealizado(`Reparación realizada para reporte: ${ticket.descripcion_problema}`);
+        }}
       />
     );
   }
@@ -421,7 +476,7 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
                         </div>
                         <button
                           type="button"
-                          onClick={() => setTicketWithEquipmentOpen(tck)}
+                          onClick={() => openOperationalEquipment(tck)}
                           className="text-[10px] font-bold text-amber-600 hover:text-amber-700 underline"
                         >
                           Abrir ficha operativa
@@ -450,16 +505,24 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
                       )}
 
                       {tck.estado === 'en_proceso' && (
-                        <button
-                          onClick={() => {
-                            setSelectedTicket(tck);
-                            setTrabajoRealizado(`Reparación realizada para reporte: ${tck.descripcion_problema}`);
-                          }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
-                        >
-                          <CheckSquare className="w-3.5 h-3.5" />
-                          <span>Finalizar y Reportar</span>
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openOperationalEquipment(tck)}
+                            disabled={linkingEquipment}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
+                          >
+                            <Laptop className="w-3.5 h-3.5" />
+                            <span>{linkingEquipment ? 'Buscando...' : 'Equipo / QR'}</span>
+                          </button>
+                          <button
+                            onClick={() => openOperationalEquipment(tck)}
+                            disabled={linkingEquipment}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5" />
+                            <span>Realizar y Cerrar</span>
+                          </button>
+                        </div>
                       )}
 
                       {tck.estado === 'resuelto' && (
@@ -636,6 +699,31 @@ export default function TechnicianPortal({ token, currentUser, onLogout, onLogin
                   {resolving ? 'Guardando...' : 'Completar y Generar Reporte'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {ticketToLinkEquipment && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-5 max-w-md w-full space-y-4 shadow-2xl border border-indigo-200">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Selecciona el equipo del ticket</h3>
+                <p className="text-xs text-slate-500 mt-1">Elige el equipo QR asignado a {ticketToLinkEquipment.solicitante_nombre}.</p>
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {equipmentCandidates.map((equipment) => (
+                  <button
+                    key={equipment.id}
+                    type="button"
+                    onClick={() => linkEquipmentToTicket(ticketToLinkEquipment, equipment).catch((err) => alert(err.message))}
+                    className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition"
+                  >
+                    <div className="font-bold text-sm text-slate-800">{equipment.hostname || `${equipment.marca || 'Equipo'} ${equipment.modelo || ''}`}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">S/N: {equipment.serial || 'No registrado'}</div>
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setTicketToLinkEquipment(null)} className="w-full py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs">Cancelar</button>
             </div>
           </div>
         )}
