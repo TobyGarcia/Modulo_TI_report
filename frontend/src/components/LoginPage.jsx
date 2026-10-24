@@ -132,7 +132,7 @@ export default function LoginPage({ onLoginSuccess, onClientAccess, staffLoginRo
               onClick={() => {
                 if (onClientAccess) return onClientAccess();
                 const equipmentId = isScanAccess ? window.location.pathname.replace(/^\/scan\//i, '') : '';
-                window.location.href = equipmentId ? `/cliente?equipo=${encodeURIComponent(equipmentId)}` : '/cliente';
+                window.location.href = equipmentId ? `/aplicacion?equipo=${encodeURIComponent(equipmentId)}` : '/aplicacion';
               }}
               className="text-xs font-bold text-blue-700 hover:text-blue-900 underline"
             >

@@ -80,7 +80,7 @@ export default function App() {
     }
   });
 
-  // Sólo el escaneo QR conserva una ruta con contexto propio. Cliente, técnico
+  // Sólo el escaneo QR conserva una ruta con contexto propio. Aplicación, técnico
   // y administrador entran por la misma PWA y la vista se decide por su rol.
   const [portalMode, setPortalMode] = useState(() => {
     try {
@@ -97,7 +97,7 @@ export default function App() {
   const [scanId, setScanId] = useState(null);
   const [showScanLogin, setShowScanLogin] = useState(false);
   const [showClientPortal, setShowClientPortal] = useState(() => {
-    try { return window.location.pathname.toLowerCase().startsWith('/cliente'); } catch { return false; }
+    try { return window.location.pathname.toLowerCase().startsWith('/aplicacion'); } catch { return false; }
   });
   const [staffLoginRole, setStaffLoginRole] = useState(() => {
     try {
@@ -123,10 +123,10 @@ export default function App() {
           setScanId(id);
           setPortalMode('scan');
         }
-      } else if (/^\/(cliente|tecnico|supervisor)(\/|$)/.test(path)) {
+      } else if (/^\/(aplicacion|tecnico|supervisor)(\/|$)/.test(path)) {
         // Accesos con contexto: siguen siendo una sola PWA (mismo manifest y
         // service worker), pero la URL deja claro el tipo de inicio de sesión.
-        if (path.startsWith('/cliente')) setShowClientPortal(true);
+        if (path.startsWith('/aplicacion')) setShowClientPortal(true);
         if (path.startsWith('/tecnico')) setStaffLoginRole('tecnico');
         if (path.startsWith('/supervisor')) setStaffLoginRole('admin');
       }
