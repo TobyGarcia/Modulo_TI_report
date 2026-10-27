@@ -19,4 +19,4 @@ services:
       - key: BOOTSTRAP_ADMIN_PASSWORD
         sync: false
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://sistema-qr-inventario.onrender.com,http://localhost,capacitor://localhost"

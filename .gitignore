@@ -22,6 +22,13 @@ yarn-error.log*
 logs/
 *.log
 
+# Llaves de firma Android (se guardan como secretos de GitHub Actions)
+*.jks
+*.keystore
+
+# Caché local usada por Gradle durante las validaciones Android
+scratch/.gradle/
+
 # Editor y SO
 .vscode/
 .idea/
