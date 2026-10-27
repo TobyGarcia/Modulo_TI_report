@@ -33,6 +33,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Configurar SDK Android
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar plataforma Android requerida
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
       - name: Instalar dependencias
         run: npm ci
 
@@ -54,6 +60,7 @@ jobs:
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: ${{ github.ref_name }}
         run: |
+          chmod +x gradlew
           ./gradlew assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/Sistema-QR-${GITHUB_REF_NAME}.apk"
 
