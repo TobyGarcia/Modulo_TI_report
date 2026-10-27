@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sistema QR Inventario</string>
+    <string name="title_activity_main">Sistema QR Inventario</string>
+    <string name="package_name">com.sistemaqr.inventario</string>
+    <string name="custom_url_scheme">com.sistemaqr.inventario</string>
+</resources>
