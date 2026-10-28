@@ -24,7 +24,12 @@ function createRateLimiter({ windowMs, max, keyGenerator = (req) => req.ip, mess
 
 function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Teams muestra las pestañas dentro de un iframe. X-Frame-Options: SAMEORIGIN
+  // bloquearía el contenido; CSP permite limitar explícitamente los hosts autorizados.
+  res.setHeader(
+    'Content-Security-Policy',
+    "frame-ancestors 'self' https://teams.microsoft.com https://*.teams.microsoft.com https://*.cloud.microsoft;"
+  );
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(), microphone=()');
   if (process.env.NODE_ENV === 'production') {

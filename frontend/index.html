@@ -11,7 +11,15 @@
     <title id="page-title">Sistema de Inventario & Etiquetas QR</title>
 
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script src="https://res.cdn.office.net/teams-js/2.19.0/js/MicrosoftTeams.min.js"></script>
     <script>
+      // No altera el funcionamiento normal en navegador; al ejecutarse dentro de
+      // Teams registra la página como contenido de una pestaña.
+      if (window.microsoftTeams?.app) {
+        window.microsoftTeams.app.initialize().catch((err) =>
+          console.warn('No se pudo inicializar el contexto de Teams:', err)
+        );
+      }
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')
           .catch((err) => console.warn('Error al registrar Service Worker:', err)));

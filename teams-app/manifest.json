@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "0.1.0",
+  "id": "0f33964c-b463-4fa1-aa6f-c81ebf2f8d03",
+  "developer": {
+    "name": "Sistema QR",
+    "websiteUrl": "https://sistema-qr-inventario.onrender.com",
+    "privacyUrl": "https://sistema-qr-inventario.onrender.com",
+    "termsOfUseUrl": "https://sistema-qr-inventario.onrender.com"
+  },
+  "name": {
+    "short": "Sistema QR (demo)",
+    "full": "Sistema de Inventario y Etiquetas QR — Demo"
+  },
+  "description": {
+    "short": "Demo de conectividad del Sistema QR en Microsoft Teams.",
+    "full": "Pestaña de prueba que muestra el Sistema de Inventario y Etiquetas QR alojado en Render dentro de Microsoft Teams."
+  },
+  "icons": {
+    "outline": "icon-outline.png",
+    "color": "icon-color.png"
+  },
+  "accentColor": "#1D4ED8",
+  "staticTabs": [
+    {
+      "entityId": "sistema-qr-demo",
+      "name": "Sistema QR",
+      "contentUrl": "https://sistema-qr-inventario.onrender.com/",
+      "websiteUrl": "https://sistema-qr-inventario.onrender.com/",
+      "scopes": ["personal"]
+    }
+  ],
+  "validDomains": ["sistema-qr-inventario.onrender.com"]
+}
