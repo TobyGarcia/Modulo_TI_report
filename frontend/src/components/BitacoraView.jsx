@@ -32,6 +32,7 @@ const safeFormatDate = (rawDate) => {
 export default function BitacoraView({ token, currentUser }) {
   const [mantenimientos, setMantenimientos] = useState([]);
   const [equipos, setEquipos] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [historialAsignaciones, setHistorialAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('agenda'); // 'agenda' | 'calendar' | 'bitacora' | 'asignaciones'
@@ -80,6 +81,17 @@ export default function BitacoraView({ token, currentUser }) {
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch('/api/empleados', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) setEmployees(await res.json());
+    } catch (e) {
+      console.error('Error al obtener empleados:', e);
+    }
+  };
+
   const fetchHistorialAsignaciones = async () => {
     try {
       const res = await fetch('/api/asignaciones/historial', {
@@ -97,6 +109,7 @@ export default function BitacoraView({ token, currentUser }) {
   useEffect(() => {
     fetchMantenimientos();
     fetchEquipos();
+    fetchEmployees();
     fetchHistorialAsignaciones();
   }, [token]);
 
@@ -106,6 +119,9 @@ export default function BitacoraView({ token, currentUser }) {
       const isEdit = !!scheduleData.id;
       const url = isEdit ? `/api/mantenimientos/${scheduleData.id}` : '/api/mantenimientos/programar';
       const method = isEdit ? 'PUT' : 'POST';
+      const payload = isEdit
+        ? { ...existingScheduleToEdit, ...scheduleData, estado: 'programado', tipo_mantenimiento: 'preventivo' }
+        : scheduleData;
 
       const res = await fetch(url, {
         method,
@@ -113,7 +129,7 @@ export default function BitacoraView({ token, currentUser }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(scheduleData)
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error('Error al procesar la programación del mantenimiento');
       setIsScheduleModalOpen(false);
@@ -185,6 +201,22 @@ export default function BitacoraView({ token, currentUser }) {
     setSelectedEquipment(eq);
     setSelectedMaintenance(maint);
     setIsReportModalOpen(true);
+  };
+
+  const handleEditSchedule = (maint) => {
+    const eq = equipos.find(e => e.id === maint.equipo_id) || {
+      id: maint.equipo_id,
+      hostname: maint.hostname,
+      serial: maint.serial,
+      marca: maint.marca,
+      modelo: maint.modelo,
+      personal_asignado: maint.equipo_personal_asignado,
+      area: maint.equipo_area
+    };
+    setSelectedEquipment(eq);
+    setExistingScheduleToEdit(maint);
+    setSelectedDateForSchedule(String(maint.fecha_programada || '').split('T')[0] || null);
+    setIsScheduleModalOpen(true);
   };
 
   // Abrir nuevo reporte directo
@@ -450,12 +482,12 @@ export default function BitacoraView({ token, currentUser }) {
           mantenimientos={filteredMantenimientos}
           equipos={equipos}
           onSelectDate={(date) => {
+            setSelectedEquipment(null);
+            setExistingScheduleToEdit(null);
             setSelectedDateForSchedule(date);
             setIsScheduleModalOpen(true);
           }}
-          onSelectMaint={(maint) => {
-            handleCompletarProgramado(maint);
-          }}
+          onSelectMaintenance={handleEditSchedule}
         />
       )}
 
@@ -484,6 +516,7 @@ export default function BitacoraView({ token, currentUser }) {
                 <thead className="bg-gray-50 uppercase text-[11px] font-bold text-gray-500 border-b">
                   <tr>
                     <th className="p-3">Fecha Programada</th>
+                    <th className="p-3">Hora</th>
                     <th className="p-3">Equipo</th>
                     <th className="p-3">Personal Asignado</th>
                     <th className="p-3">Tipo</th>
@@ -496,6 +529,9 @@ export default function BitacoraView({ token, currentUser }) {
                     <tr key={maint.id} className="hover:bg-yellow-50/50 transition">
                       <td className="p-3 font-semibold text-gray-900">
                         {safeFormatDate(maint.fecha_programada)}
+                      </td>
+                      <td className="p-3 font-mono font-semibold text-indigo-700">
+                        {maint.hora_programada || 'Pendiente'}
                       </td>
                       <td className="p-3">
                         <div className="font-bold text-gray-900">{maint.hostname || 'SIN-HOSTNAME'}</div>
@@ -517,11 +553,11 @@ export default function BitacoraView({ token, currentUser }) {
                       </td>
                       <td className="p-3 text-center">
                         <button
-                          onClick={() => handleCompletarProgramado(maint)}
+                          onClick={() => handleEditSchedule(maint)}
                           className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-[#ffcb24] font-bold rounded-lg text-xs shadow-xs flex items-center space-x-1.5 mx-auto transition-colors"
                         >
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Completar Reporte</span>
+                          <CalendarIcon className="w-3.5 h-3.5" />
+                          <span>Ver / reprogramar</span>
                         </button>
                       </td>
                     </tr>
@@ -727,6 +763,7 @@ export default function BitacoraView({ token, currentUser }) {
         onSave={handleSaveSchedule}
         equipment={selectedEquipment}
         equiposList={equipos}
+        employees={employees}
         currentUser={currentUser}
         initialDate={selectedDateForSchedule}
         existingSchedule={existingScheduleToEdit}

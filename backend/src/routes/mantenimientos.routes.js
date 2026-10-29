@@ -21,6 +21,22 @@ function calcularProximaFecha6Meses(fechaBase) {
   return d.toISOString().split('T')[0];
 }
 
+// La agenda preventiva se trabaja en horario laboral; se conserva compatibilidad
+// con los registros históricos que almacenaban la hora como "09:00 AM".
+function normalizarHoraAgenda(hora) {
+  const value = String(hora || '').trim();
+  const amPm = value.match(/^(0?[1-9]|1[0-2]):00\s*(AM|PM)$/i);
+  let hour = null;
+  if (amPm) {
+    hour = Number(amPm[1]);
+    if (amPm[2].toUpperCase() === 'PM' && hour !== 12) hour += 12;
+    if (amPm[2].toUpperCase() === 'AM' && hour === 12) hour = 0;
+  } else if (/^(0[9]|1[0-6]):00$/.test(value)) {
+    hour = Number(value.slice(0, 2));
+  }
+  return hour !== null && hour >= 9 && hour <= 16 ? `${String(hour).padStart(2, '0')}:00` : null;
+}
+
 // Listar mantenimientos con opción de filtrado (Protegido)
 router.get('/', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
   try {
@@ -207,6 +223,13 @@ router.post('/programar', authenticateToken, authorizeRoles('admin', 'supervisor
     if (!equipo_id || !fecha_programada || !tipo_mantenimiento) {
       return res.status(400).json({ error: 'El equipo, la fecha programada y el tipo de mantenimiento son obligatorios' });
     }
+    if (tipo_mantenimiento !== 'preventivo') {
+      return res.status(400).json({ error: 'La agenda sólo permite programar mantenimientos preventivos' });
+    }
+    const horaAgenda = normalizarHoraAgenda(hora_programada);
+    if (!horaAgenda) {
+      return res.status(400).json({ error: 'La hora programada debe estar entre las 09:00 y las 16:00' });
+    }
 
     const query = `
       INSERT INTO mantenimientos (
@@ -220,7 +243,7 @@ router.post('/programar', authenticateToken, authorizeRoles('admin', 'supervisor
       parseInt(equipo_id, 10),
       tipo_mantenimiento,
       fecha_programada,
-      hora_programada || 'Pendiente',
+      horaAgenda,
       turno || 'Matutino',
       tecnico_nombre || req.user.nombre,
       observaciones_equipo || ''
@@ -476,6 +499,12 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor', 'tec
       firma_tecnico
     } = req.body;
 
+    const esProgramacionPreventiva = estado === 'programado' && fecha_programada;
+    const horaAgenda = esProgramacionPreventiva ? normalizarHoraAgenda(hora_programada) : hora_programada;
+    if (esProgramacionPreventiva && (tipo_mantenimiento !== 'preventivo' || !horaAgenda)) {
+      return res.status(400).json({ error: 'Las programaciones preventivas deben usar una hora entre las 09:00 y las 16:00' });
+    }
+
     const query = `
       UPDATE mantenimientos SET
         tipo_mantenimiento = $1,
@@ -507,7 +536,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor', 'tec
       tipo_mantenimiento,
       estado,
       fecha_programada || null,
-      hora_programada || 'Pendiente',
+      horaAgenda || 'Pendiente',
       fecha_realizado || null,
       turno,
       empleado_responsable,
