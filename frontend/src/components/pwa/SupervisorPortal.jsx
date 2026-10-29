@@ -9,7 +9,7 @@ import CalendarView from '../CalendarView';
 import ScheduleMaintenanceModal from '../ScheduleMaintenanceModal';
 
 export default function SupervisorPortal({ token, currentUser, onLogout, onLoginSuccess }) {
-  const [activeTab, setActiveTab] = useState('aprobaciones'); // 'aprobaciones' | 'agenda' | 'metricas'
+  const [activeTab, setActiveTab] = useState('aprobaciones'); // 'aprobaciones' | 'preventivos' | 'tickets' | 'metricas'
   const [pendientes, setPendientes] = useState([]);
   const [todosLosTickets, setTodosLosTickets] = useState([]);
   const [tecnicosList, setTecnicosList] = useState([]);
@@ -359,14 +359,24 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
             <span className="inline-flex items-center justify-center gap-1"><Inbox className="w-3.5 h-3.5" /> Aprobaciones ({pendientes.length})</span>
           </button>
           <button
-            onClick={() => setActiveTab('agenda')}
+            onClick={() => setActiveTab('preventivos')}
             className={`flex-1 py-2 text-xs font-bold text-center border-b-2 transition ${
-              activeTab === 'agenda'
+              activeTab === 'preventivos'
                 ? 'border-white text-white'
                 : 'border-transparent text-emerald-200 hover:text-white'
             }`}
           >
-            <span className="inline-flex items-center justify-center gap-1"><Calendar className="w-3.5 h-3.5" /> Agenda & Calendario</span>
+            <span className="inline-flex items-center justify-center gap-1"><Calendar className="w-3.5 h-3.5" /> Preventivos</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('tickets')}
+            className={`flex-1 py-2 text-xs font-bold text-center border-b-2 transition ${
+              activeTab === 'tickets'
+                ? 'border-white text-white'
+                : 'border-transparent text-emerald-200 hover:text-white'
+            }`}
+          >
+            <span className="inline-flex items-center justify-center gap-1"><CheckSquare className="w-3.5 h-3.5" /> Tickets</span>
           </button>
           <button
             onClick={() => setActiveTab('metricas')}
@@ -480,8 +490,8 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
           </div>
         )}
 
-        {/* ================= TAB 2: AGENDA Y CALENDARIO ================= */}
-        {activeTab === 'agenda' && (
+        {/* ================= TAB 2: MANTENIMIENTOS PREVENTIVOS ================= */}
+        {activeTab === 'preventivos' && (
           <div className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -502,7 +512,13 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
               onSelectMaintenance={openScheduleToEdit}
             />
 
-            <h3 className="border-t border-slate-200 pt-5 font-bold text-slate-800 text-sm flex items-center gap-1.5">
+          </div>
+        )}
+
+        {/* ================= TAB 3: SEGUIMIENTO DE TICKETS ================= */}
+        {activeTab === 'tickets' && (
+          <div className="space-y-3">
+            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
               <CheckSquare className="w-4 h-4 text-emerald-600" />
               Programación y seguimiento de tickets
             </h3>
@@ -543,7 +559,7 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
           </div>
         )}
 
-        {/* ================= TAB 3: MÉTRICAS ================= */}
+        {/* ================= TAB 4: MÉTRICAS ================= */}
         {activeTab === 'metricas' && stats && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -711,6 +727,7 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
         equipment={selectedEquipment}
         equiposList={equipos}
         employees={employees}
+        technicians={tecnicosList}
         currentUser={currentUser}
         initialDate={selectedDateForSchedule}
         existingSchedule={existingScheduleToEdit}

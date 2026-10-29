@@ -4,7 +4,7 @@ import { Calendar, Check, Clock, Laptop, Search, User, X } from 'lucide-react';
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'];
 const employeeName = (item) => item?.personal_asignado?.trim() || '';
 
-export default function ScheduleMaintenanceModal({ isOpen, onClose, onSave, equipment, equiposList = [], employees = [], currentUser, initialDate = null, existingSchedule = null }) {
+export default function ScheduleMaintenanceModal({ isOpen, onClose, onSave, equipment, equiposList = [], employees = [], technicians = [], currentUser, initialDate = null, existingSchedule = null }) {
   const [selectedEq, setSelectedEq] = useState(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -27,11 +27,14 @@ export default function ScheduleMaintenanceModal({ isOpen, onClose, onSave, equi
     if (!isOpen) return;
     const initialEquipment = existingSchedule ? equiposList.find((item) => item.id === existingSchedule.equipo_id) || equipment : equipment || null;
     const date = existingSchedule?.fecha_programada ? String(existingSchedule.fecha_programada).split('T')[0] : initialDate || new Date().toISOString().split('T')[0];
+    const technicianName = existingSchedule?.tecnico_nombre || (technicians.some((technician) => technician.nombre === currentUser?.nombre)
+      ? currentUser?.nombre
+      : technicians[0]?.nombre || currentUser?.nombre || '');
     setSelectedEmployee(employeeName(initialEquipment));
     setSelectedEq(initialEquipment);
     setSearchFilter('');
-    setFormData({ id: existingSchedule?.id || null, equipo_id: initialEquipment?.id || '', tipo_mantenimiento: 'preventivo', fecha_programada: date, hora_programada: TIME_SLOTS.includes(existingSchedule?.hora_programada) ? existingSchedule.hora_programada : '09:00', turno: 'Horario laboral', tecnico_nombre: existingSchedule?.tecnico_nombre || currentUser?.nombre || '', observaciones_equipo: existingSchedule?.observaciones_equipo || '' });
-  }, [isOpen, equipment?.id, existingSchedule?.id, initialDate, equiposList, currentUser?.nombre]);
+    setFormData({ id: existingSchedule?.id || null, equipo_id: initialEquipment?.id || '', tipo_mantenimiento: 'preventivo', fecha_programada: date, hora_programada: TIME_SLOTS.includes(existingSchedule?.hora_programada) ? existingSchedule.hora_programada : '09:00', turno: 'Horario laboral', tecnico_nombre: technicianName, observaciones_equipo: existingSchedule?.observaciones_equipo || '' });
+  }, [isOpen, equipment?.id, existingSchedule?.id, initialDate, equiposList, technicians, currentUser?.nombre]);
 
   const selectEmployee = (name) => {
     const nextEquipment = equiposList.find((item) => employeeName(item).toLowerCase() === name.toLowerCase()) || null;
@@ -59,7 +62,7 @@ export default function ScheduleMaintenanceModal({ isOpen, onClose, onSave, equi
         </div>
         {selectedEq && <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600"><b className="text-gray-900">{selectedEq.hostname || 'Equipo sin hostname'}</b> · {selectedEq.marca} {selectedEq.modelo} · Área: {selectedEq.area || 'Sin área'}</div>}
         <div><p className="text-[11px] font-bold uppercase tracking-wide text-gray-700 mb-3">2. Fecha y horario</p><div className="grid gap-3 sm:grid-cols-2"><div><label className="mb-1 block text-xs font-semibold text-gray-700">Día</label><input type="date" required value={formData.fecha_programada} onChange={(event) => setFormData({ ...formData, fecha_programada: event.target.value })} className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" /></div><div><label className="mb-1 block text-xs font-semibold text-gray-700"><Clock className="inline w-3.5 h-3.5 mr-1 text-indigo-600" />Hora</label><select value={formData.hora_programada} onChange={(event) => setFormData({ ...formData, hora_programada: event.target.value })} className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500">{TIME_SLOTS.map((time) => <option key={time} value={time}>{time} h</option>)}</select></div></div></div>
-        <div className="grid gap-3 sm:grid-cols-2"><div><label className="mb-1 block text-xs font-semibold text-gray-700">Responsable TI</label><input value={formData.tecnico_nombre} onChange={(event) => setFormData({ ...formData, tecnico_nombre: event.target.value })} placeholder="Nombre del responsable" className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" /></div><div><label className="mb-1 block text-xs font-semibold text-gray-700">Notas</label><input value={formData.observaciones_equipo} onChange={(event) => setFormData({ ...formData, observaciones_equipo: event.target.value })} placeholder="Limpieza, revisión, actualización..." className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" /></div></div>
+        <div className="grid gap-3 sm:grid-cols-2"><div><label className="mb-1 block text-xs font-semibold text-gray-700">Técnico asignado</label>{technicians.length ? <select required value={formData.tecnico_nombre} onChange={(event) => setFormData({ ...formData, tecnico_nombre: event.target.value })} className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500"><option value="">Selecciona un técnico</option>{technicians.map((technician) => <option key={technician.id || technician.nombre} value={technician.nombre}>{technician.nombre}</option>)}</select> : <input required value={formData.tecnico_nombre} onChange={(event) => setFormData({ ...formData, tecnico_nombre: event.target.value })} placeholder="Nombre del técnico responsable" className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" />}</div><div><label className="mb-1 block text-xs font-semibold text-gray-700">Notas</label><input value={formData.observaciones_equipo} onChange={(event) => setFormData({ ...formData, observaciones_equipo: event.target.value })} placeholder="Limpieza, revisión, actualización..." className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" /></div></div>
         <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t bg-white pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-200">Cancelar</button><button type="submit" className="flex items-center justify-center gap-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"><Check className="w-4 h-4" />{existingSchedule ? 'Guardar cambios' : 'Agendar preventivo'}</button></div>
       </form>
     </div>
