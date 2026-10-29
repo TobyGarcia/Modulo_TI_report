@@ -135,6 +135,17 @@ export default function App() {
     }
   }, []);
 
+  // El administrador usa la PWA de supervisión como entrada principal. Teams
+  // abre la pestaña en "/", por lo que normalizamos esa ruta tras autenticar
+  // sin interferir con el flujo especial de un QR escaneado.
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    const path = window.location.pathname.toLowerCase();
+    if (!path.startsWith('/supervisor') && !path.startsWith('/scan/')) {
+      window.history.replaceState({}, '', '/supervisor');
+    }
+  }, [user?.role]);
+
   const handleLoginSuccess = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
@@ -316,10 +327,9 @@ export default function App() {
     return <TechnicianPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // La ruta del supervisor conserva una bandeja operativa separada dentro de
-  // la misma PWA: aquí se revisan los reportes abiertos y se asignan al técnico.
-  // El panel general sigue siendo la vista predeterminada del administrador.
-  if (user?.role === 'admin' && window.location.pathname.toLowerCase().startsWith('/supervisor')) {
+  // La PWA de supervisión es la vista predeterminada para administradores,
+  // tanto al abrir la pestaña de Teams como al entrar desde /supervisor.
+  if (user?.role === 'admin') {
     return <SupervisorPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }
 
