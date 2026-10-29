@@ -5,6 +5,8 @@ import {
   LogOut, Star, BarChart3, Filter, X, Inbox
 } from 'lucide-react';
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
+import CalendarView from '../CalendarView';
+import ScheduleMaintenanceModal from '../ScheduleMaintenanceModal';
 
 export default function SupervisorPortal({ token, currentUser, onLogout, onLoginSuccess }) {
   const [activeTab, setActiveTab] = useState('aprobaciones'); // 'aprobaciones' | 'agenda' | 'metricas'
@@ -12,7 +14,14 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
   const [todosLosTickets, setTodosLosTickets] = useState([]);
   const [tecnicosList, setTecnicosList] = useState([]);
   const [stats, setStats] = useState(null);
+  const [mantenimientos, setMantenimientos] = useState([]);
+  const [equipos, setEquipos] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [selectedDateForSchedule, setSelectedDateForSchedule] = useState(null);
+  const [existingScheduleToEdit, setExistingScheduleToEdit] = useState(null);
 
   // Login de supervisor si no hay token
   const [username, setUsername] = useState('supervisor');
@@ -76,6 +85,16 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
         const users = await resUsers.json();
         setTecnicosList(users);
       }
+
+      // Datos propios del calendario de mantenimientos preventivos.
+      const [mantenimientosRes, equiposRes, employeesRes] = await Promise.all([
+        fetch('/api/mantenimientos', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/equipos', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/empleados', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      if (mantenimientosRes.ok) setMantenimientos(await mantenimientosRes.json());
+      if (equiposRes.ok) setEquipos(await equiposRes.json());
+      if (employeesRes.ok) setEmployees(await employeesRes.json());
     } catch (err) {
       console.error('Error al cargar datos del supervisor:', err);
     } finally {
@@ -108,6 +127,52 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
       setLoginError(err.message);
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const openNewPreventiveSchedule = (date = null) => {
+    setSelectedEquipment(null);
+    setSelectedDateForSchedule(date);
+    setExistingScheduleToEdit(null);
+    setIsScheduleModalOpen(true);
+  };
+
+  const openScheduleToEdit = (maint) => {
+    const equipment = equipos.find((item) => item.id === maint.equipo_id) || {
+      id: maint.equipo_id,
+      hostname: maint.hostname,
+      serial: maint.serial,
+      marca: maint.marca,
+      modelo: maint.modelo,
+      personal_asignado: maint.equipo_personal_asignado,
+      area: maint.equipo_area
+    };
+    setSelectedEquipment(equipment);
+    setSelectedDateForSchedule(String(maint.fecha_programada || '').split('T')[0] || null);
+    setExistingScheduleToEdit(maint);
+    setIsScheduleModalOpen(true);
+  };
+
+  const savePreventiveSchedule = async (scheduleData) => {
+    try {
+      const isEdit = Boolean(scheduleData.id);
+      const response = await fetch(isEdit ? `/api/mantenimientos/${scheduleData.id}` : '/api/mantenimientos/programar', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(isEdit
+          ? { ...existingScheduleToEdit, ...scheduleData, estado: 'programado', tipo_mantenimiento: 'preventivo' }
+          : scheduleData)
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'No fue posible guardar el mantenimiento preventivo');
+      }
+      setIsScheduleModalOpen(false);
+      setExistingScheduleToEdit(null);
+      setSelectedDateForSchedule(null);
+      fetchDashboardData();
+    } catch (error) {
+      alert(error.message);
     }
   };
 
@@ -417,11 +482,30 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
 
         {/* ================= TAB 2: AGENDA Y CALENDARIO ================= */}
         {activeTab === 'agenda' && (
-          <div className="space-y-3">
-            <h2 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-emerald-600" />
-              <span>Programación y Seguimiento de Tareas</span>
-            </h2>
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span>Calendario de mantenimientos preventivos</span>
+                </h2>
+                <p className="mt-1 text-[11px] text-slate-500">Selecciona el usuario, su equipo asignado, día y hora de 09:00 a 16:00.</p>
+              </div>
+              <button onClick={() => openNewPreventiveSchedule()} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                <Calendar className="w-4 h-4" /> Programar preventivo
+              </button>
+            </div>
+
+            <CalendarView
+              mantenimientos={mantenimientos.filter((item) => item.tipo_mantenimiento === 'preventivo')}
+              onSelectDate={openNewPreventiveSchedule}
+              onSelectMaintenance={openScheduleToEdit}
+            />
+
+            <h3 className="border-t border-slate-200 pt-5 font-bold text-slate-800 text-sm flex items-center gap-1.5">
+              <CheckSquare className="w-4 h-4 text-emerald-600" />
+              Programación y seguimiento de tickets
+            </h3>
 
             <div className="space-y-2">
               {todosLosTickets
@@ -615,6 +699,22 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
           </div>
         )}
       </main>
+
+      <ScheduleMaintenanceModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => {
+          setIsScheduleModalOpen(false);
+          setExistingScheduleToEdit(null);
+          setSelectedDateForSchedule(null);
+        }}
+        onSave={savePreventiveSchedule}
+        equipment={selectedEquipment}
+        equiposList={equipos}
+        employees={employees}
+        currentUser={currentUser}
+        initialDate={selectedDateForSchedule}
+        existingSchedule={existingScheduleToEdit}
+      />
     </div>
   );
 }
