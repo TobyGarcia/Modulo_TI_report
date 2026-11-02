@@ -41,6 +41,20 @@ function categoryValuesFromRequest(attributes, legacyValues) {
   // prioriza el formulario estructurado de la categoría.
   return { ...legacyValues, ...(attributes || {}) };
 }
+
+function normalizeBitLocker(data = {}) {
+  const enabled = data.bitlocker_habilitado === true || data.bitlocker_habilitado === 'true' || data.bitlocker_habilitado === 'Sí';
+  const identificador = String(data.bitlocker_identificador || '').trim();
+  const clave = String(data.bitlocker_clave || '').trim();
+  if (enabled && (!identificador || !clave)) {
+    throw new Error('Indica el identificador y la clave de recuperación de BitLocker');
+  }
+  return {
+    enabled,
+    identificador: enabled ? identificador : null,
+    clave: enabled ? clave : null
+  };
+}
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -84,7 +98,8 @@ router.get('/export', authenticateToken, authorizeRoles('admin', 'supervisor'), 
         SELECT e.id, e.item, e.empresa, e.ciudad, e.area, e.hostname, e.marca,
                e.modelo, e.serial, e.so, e.cpu, e.ram_capacidad, e.disco_capacidad,
                e.gpu_tipo, e.gpu_modelo, e.mac_wifi, e.estado_fisico,
-               e.uso_recomendado, e.observaciones, e.created_at, e.updated_at,
+               e.uso_recomendado, e.observaciones, e.bitlocker_habilitado,
+               e.bitlocker_identificador, e.bitlocker_clave, e.created_at, e.updated_at,
                COALESCE(NULLIF(TRIM(e.personal_asignado), ''), emp.nombre, 'Sin asignar') AS responsable,
                emp.no_empleado, emp.puesto, COALESCE(st.nombre, 'Sin estado') AS estado_nombre
                ${detailSelect}
@@ -295,7 +310,8 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'supervisor'), async
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra, atributos_categoria
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+      bitlocker_habilitado, bitlocker_identificador, bitlocker_clave, especificaciones_extra, atributos_categoria
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -324,6 +340,7 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'supervisor'), async
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
     const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
+    const bitLocker = normalizeBitLocker({ bitlocker_habilitado, bitlocker_identificador, bitlocker_clave });
     const categoryValues = categoryValuesFromRequest(atributos_categoria, {
       hostname, marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
@@ -333,15 +350,17 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'supervisor'), async
       INSERT INTO equipos (
         item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+        bitlocker_habilitado, bitlocker_identificador, bitlocker_clave, especificaciones_extra
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING *;
     `;
 
     const values = [
       item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, categoryValues.hostname,
       categoryValues.marca, categoryValues.modelo, categoryValues.serial, categoryValues.so, categoryValues.cpu, categoryValues.ram_capacidad, categoryValues.disco_capacidad,
-      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones, jsonExtra
+      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones,
+      bitLocker.enabled, bitLocker.identificador, bitLocker.clave, jsonExtra
     ];
 
     const result = await pool.query(query, values);
@@ -368,7 +387,8 @@ router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'),
       const {
         item, personal_asignado, tipo_equipo_id, tipo_equipo, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+        bitlocker_habilitado, bitlocker_identificador, bitlocker_clave
       } = record;
 
       if (!serial && !hostname) continue;
@@ -399,12 +419,15 @@ router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'),
         }
       }
 
+      const bitLocker = normalizeBitLocker({ bitlocker_habilitado, bitlocker_identificador, bitlocker_clave });
+
       const upsertQuery = `
         INSERT INTO equipos (
           item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
           marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-          gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+          bitlocker_habilitado, bitlocker_identificador, bitlocker_clave
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         ON CONFLICT (serial) DO UPDATE SET
           item = EXCLUDED.item,
           personal_asignado = EXCLUDED.personal_asignado,
@@ -427,6 +450,9 @@ router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'),
           mac_wifi = EXCLUDED.mac_wifi,
           uso_recomendado = EXCLUDED.uso_recomendado,
           observaciones = EXCLUDED.observaciones,
+          bitlocker_habilitado = EXCLUDED.bitlocker_habilitado,
+          bitlocker_identificador = EXCLUDED.bitlocker_identificador,
+          bitlocker_clave = EXCLUDED.bitlocker_clave,
           updated_at = CURRENT_TIMESTAMP
         RETURNING xmax;
       `;
@@ -434,7 +460,8 @@ router.post('/import', authenticateToken, authorizeRoles('admin', 'supervisor'),
       const values = [
         item ? parseInt(item, 10) : null, pAsignado, empId, stId, targetTipoEquipoId, empresa, ciudad, area, hostname,
         marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
+        gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+        bitLocker.enabled, bitLocker.identificador, bitLocker.clave
       ];
 
       const resInsert = await pool.query(upsertQuery, values);
@@ -464,7 +491,8 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor'), asy
     const {
       item, personal_asignado, empleado_id, estado_id, tipo_equipo_id, empresa, ciudad, area, hostname,
       marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
-      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones, especificaciones_extra, atributos_categoria
+      gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones,
+      bitlocker_habilitado, bitlocker_identificador, bitlocker_clave, especificaciones_extra, atributos_categoria
     } = req.body;
 
     let targetEmpleadoId = empleado_id || null;
@@ -485,6 +513,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor'), asy
     const calculatedEstadoId = estado_id || (targetEmpleadoId ? 2 : 1);
     const targetTipoEquipoId = tipo_equipo_id ? parseInt(tipo_equipo_id, 10) : 1;
     const jsonExtra = especificaciones_extra ? JSON.stringify(especificaciones_extra) : '{}';
+    const bitLocker = normalizeBitLocker({ bitlocker_habilitado, bitlocker_identificador, bitlocker_clave });
     const categoryValues = categoryValuesFromRequest(atributos_categoria, {
       hostname, marca, modelo, serial, so, cpu, ram_capacidad, disco_capacidad,
       gpu_tipo, gpu_modelo, estado_fisico, mac_wifi, uso_recomendado, observaciones
@@ -495,16 +524,17 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'supervisor'), asy
         item = $1, personal_asignado = $2, empleado_id = $3, estado_id = $4, tipo_equipo_id = $5, empresa = $6, ciudad = $7, area = $8, hostname = $9,
         marca = $10, modelo = $11, serial = $12, so = $13, cpu = $14, ram_capacidad = $15, disco_capacidad = $16,
         gpu_tipo = $17, gpu_modelo = $18, estado_fisico = $19, mac_wifi = $20, uso_recomendado = $21, observaciones = $22,
-        especificaciones_extra = $23, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $24
+        bitlocker_habilitado = $23, bitlocker_identificador = $24, bitlocker_clave = $25,
+        especificaciones_extra = $26, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $27
       RETURNING *;
     `;
 
     const values = [
       item ? parseInt(item, 10) : null, targetPersonal, targetEmpleadoId, calculatedEstadoId, targetTipoEquipoId, empresa, ciudad, area, categoryValues.hostname,
       categoryValues.marca, categoryValues.modelo, categoryValues.serial, categoryValues.so, categoryValues.cpu, categoryValues.ram_capacidad, categoryValues.disco_capacidad,
-      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones, jsonExtra,
-      id
+      categoryValues.gpu_tipo, categoryValues.gpu_modelo, categoryValues.estado_fisico, categoryValues.mac_wifi, categoryValues.uso_recomendado, categoryValues.observaciones,
+      bitLocker.enabled, bitLocker.identificador, bitLocker.clave, jsonExtra, id
     ];
 
     const result = await pool.query(query, values);

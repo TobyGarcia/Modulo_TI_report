@@ -264,6 +264,9 @@ async function initDatabase() {
         gpu_modelo VARCHAR(100),
         estado_fisico VARCHAR(100),
         mac_wifi VARCHAR(50),
+        bitlocker_habilitado BOOLEAN DEFAULT FALSE,
+        bitlocker_identificador VARCHAR(100),
+        bitlocker_clave TEXT,
         especificaciones_extra JSONB DEFAULT '{}',
         uso_recomendado TEXT,
         observaciones TEXT,
@@ -278,6 +281,9 @@ async function initDatabase() {
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS estado_id INT REFERENCES estados_equipo(id) DEFAULT 1;
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS tipo_equipo_id INT REFERENCES tipos_equipo(id) DEFAULT 1;
       ALTER TABLE equipos ADD COLUMN IF NOT EXISTS especificaciones_extra JSONB DEFAULT '{}';
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS bitlocker_habilitado BOOLEAN DEFAULT FALSE;
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS bitlocker_identificador VARCHAR(100);
+      ALTER TABLE equipos ADD COLUMN IF NOT EXISTS bitlocker_clave TEXT;
       UPDATE equipos SET tipo_equipo_id = 1 WHERE tipo_equipo_id IS NULL;
     `);
 

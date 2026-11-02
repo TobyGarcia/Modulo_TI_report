@@ -21,6 +21,9 @@ const INITIAL_FORM = {
   gpu_modelo: '',
   estado_fisico: 'Excelente',
   mac_wifi: '',
+  bitlocker_habilitado: false,
+  bitlocker_identificador: '',
+  bitlocker_clave: '',
   uso_recomendado: '',
   observaciones: '',
   especificaciones_extra: {},
@@ -96,6 +99,16 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
         ...(prev.especificaciones_extra || {}),
         [name]: value
       }
+    }));
+  };
+
+  const handleBitLockerToggle = (e) => {
+    const enabled = e.target.checked;
+    setFormData(prev => ({
+      ...prev,
+      bitlocker_habilitado: enabled,
+      bitlocker_identificador: enabled ? prev.bitlocker_identificador : '',
+      bitlocker_clave: enabled ? prev.bitlocker_clave : ''
     }));
   };
 
@@ -842,6 +855,48 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                   </select>
                 </div>
               </div>
+            )}
+
+            {currentTipoId === 1 && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:col-span-3">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-amber-950">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.bitlocker_habilitado)}
+                    onChange={handleBitLockerToggle}
+                    className="h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                  />
+                  Este equipo tiene BitLocker habilitado
+                </label>
+                {formData.bitlocker_habilitado && (
+                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">Identificador BitLocker *</label>
+                      <input
+                        type="text"
+                        name="bitlocker_identificador"
+                        required
+                        value={formData.bitlocker_identificador || ''}
+                        onChange={handleChange}
+                        className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 outline-none"
+                        placeholder="Identificador de clave de recuperación"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">Clave de recuperación BitLocker *</label>
+                      <input
+                        type="text"
+                        name="bitlocker_clave"
+                        required
+                        value={formData.bitlocker_clave || ''}
+                        onChange={handleChange}
+                        className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 outline-none"
+                        placeholder="Clave de recuperación"
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
             )}
           </div>
 
