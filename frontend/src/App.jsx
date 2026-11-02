@@ -23,6 +23,12 @@ import SupervisorPortal from './components/pwa/SupervisorPortal';
 // Assets
 import logoITZ from './assets/logotiposQR/ITZ.png';
 import { Wrench, ShieldCheck, Laptop, Lock, ArrowRight } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+
+// El APK empaquetado no debe exponer el panel administrativo de escritorio.
+// Capacitor carga el mismo bundle local, por lo que se identifica aquí y se
+// mantiene dentro de la experiencia PWA.
+const isNativeApp = Capacitor.isNativePlatform();
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -102,6 +108,7 @@ export default function App() {
   });
   const [staffLoginRole, setStaffLoginRole] = useState(() => {
     try {
+      if (isNativeApp) return 'admin';
       const path = window.location.pathname.toLowerCase();
       if (path.startsWith('/tecnico')) return 'tecnico';
       if (path.startsWith('/supervisor')) return 'admin';
@@ -118,7 +125,10 @@ export default function App() {
   useEffect(() => {
     try {
       const path = window.location.pathname.toLowerCase();
-      if (path.startsWith('/scan/')) {
+      if (isNativeApp) {
+        // La navegación interna del APK permanece en la PWA de supervisión.
+        setStaffLoginRole('admin');
+      } else if (path.startsWith('/scan/')) {
         const id = window.location.pathname.replace(/^\/scan\//i, '');
         if (id) {
           setScanId(id);
@@ -319,7 +329,7 @@ export default function App() {
 
   // La PWA de supervisión permanece disponible para administradores en su
   // ruta dedicada. El panel web normal no se sustituye al iniciar sesión.
-  const isSupervisorPortal = window.location.pathname.toLowerCase().startsWith('/supervisor');
+  const isSupervisorPortal = isNativeApp || window.location.pathname.toLowerCase().startsWith('/supervisor');
   if (user?.role === 'admin' && isSupervisorPortal) {
     return <SupervisorPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }

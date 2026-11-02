@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, CheckCircle, Clock, AlertTriangle, UserCheck,
   Calendar, CheckSquare, XCircle, ChevronRight, Search,
-  LogOut, Star, BarChart3, Filter, X, Inbox, ExternalLink
+  LogOut, Star, BarChart3, Filter, X, Inbox
 } from 'lucide-react';
 import logoITZ from '../../assets/logotiposQR/ITZ.png';
 import CalendarView from '../CalendarView';
@@ -330,14 +330,6 @@ export default function SupervisorPortal({ token, currentUser, onLogout, onLogin
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.location.assign('/admin')}
-              className="p-1.5 bg-white/15 hover:bg-white/25 rounded-lg transition"
-              title="Abrir panel administrativo web"
-              aria-label="Abrir panel administrativo web"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </button>
             <button
               onClick={fetchDashboardData}
               className="p-1.5 bg-white/15 hover:bg-white/25 rounded-lg transition"

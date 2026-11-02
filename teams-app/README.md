@@ -3,7 +3,11 @@
 Este directorio contiene el paquete de una pestaña personal de Teams que carga la
 instancia alojada en Render:
 
-`https://sistema-qr-inventario.onrender.com/`
+`https://sistema-qr-inventario.onrender.com/supervisor`
+
+La pestaña de Teams se mantiene deliberadamente en la PWA de supervisión; el
+panel administrativo de escritorio se abre sólo desde un navegador en
+`/admin`.
 
 ## Crear el paquete
 

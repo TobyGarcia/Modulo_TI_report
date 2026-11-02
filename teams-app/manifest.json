@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "id": "0f33964c-b463-4fa1-aa6f-c81ebf2f8d03",
   "developer": {
     "name": "Sistema QR",
@@ -26,8 +26,8 @@
     {
       "entityId": "sistema-qr-demo",
       "name": "Sistema QR",
-      "contentUrl": "https://sistema-qr-inventario.onrender.com/",
-      "websiteUrl": "https://sistema-qr-inventario.onrender.com/",
+      "contentUrl": "https://sistema-qr-inventario.onrender.com/supervisor",
+      "websiteUrl": "https://sistema-qr-inventario.onrender.com/supervisor",
       "scopes": ["personal"]
     }
   ],

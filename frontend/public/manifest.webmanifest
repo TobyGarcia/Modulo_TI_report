@@ -3,7 +3,7 @@
   "name": "Sistema QR ITZ",
   "short_name": "Sistema QR",
   "description": "Inventario, mesa de ayuda y soporte técnico de ITZ",
-  "start_url": "/",
+  "start_url": "/supervisor",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
