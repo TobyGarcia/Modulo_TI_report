@@ -80,8 +80,9 @@ export default function App() {
     }
   });
 
-  // Sólo el escaneo QR conserva una ruta con contexto propio. Aplicación, técnico
-  // y administrador entran por la misma PWA y la vista se decide por su rol.
+  // Sólo el escaneo QR conserva una ruta con contexto propio. La PWA de
+  // supervisión vive en /supervisor; el panel administrativo web conserva su
+  // propia entrada en /admin (y en la raíz del sitio).
   const [portalMode, setPortalMode] = useState(() => {
     try {
       const p = window.location.pathname.toLowerCase();
@@ -134,17 +135,6 @@ export default function App() {
       console.error('Error al detectar ruta:', e);
     }
   }, []);
-
-  // El administrador usa la PWA de supervisión como entrada principal. Teams
-  // abre la pestaña en "/", por lo que normalizamos esa ruta tras autenticar
-  // sin interferir con el flujo especial de un QR escaneado.
-  useEffect(() => {
-    if (user?.role !== 'admin') return;
-    const path = window.location.pathname.toLowerCase();
-    if (!path.startsWith('/supervisor') && !path.startsWith('/scan/')) {
-      window.history.replaceState({}, '', '/supervisor');
-    }
-  }, [user?.role]);
 
   const handleLoginSuccess = (newToken, newUser) => {
     setToken(newToken);
@@ -327,9 +317,10 @@ export default function App() {
     return <TechnicianPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // La PWA de supervisión es la vista predeterminada para administradores,
-  // tanto al abrir la pestaña de Teams como al entrar desde /supervisor.
-  if (user?.role === 'admin') {
+  // La PWA de supervisión permanece disponible para administradores en su
+  // ruta dedicada. El panel web normal no se sustituye al iniciar sesión.
+  const isSupervisorPortal = window.location.pathname.toLowerCase().startsWith('/supervisor');
+  if (user?.role === 'admin' && isSupervisorPortal) {
     return <SupervisorPortal token={token} currentUser={user} onLogout={handleLogout} onLoginSuccess={handleLoginSuccess} />;
   }
 
