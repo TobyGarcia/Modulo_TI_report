@@ -63,6 +63,13 @@ export default function CatalogosView({ token }) {
   const handleAddTipo = async (e) => {
     e.preventDefault();
     if (!newTipo.nombre.trim()) return;
+    const existing = catalogos.tipos_equipo.find(tipo =>
+      tipo.nombre.trim().toLocaleLowerCase() === newTipo.nombre.trim().toLocaleLowerCase()
+    );
+    if (existing) {
+      showNotification(`La categoría "${existing.nombre}" ya existe. Selecciónala en el modal de equipos para usarla.`, true);
+      return;
+    }
     try {
       const res = await fetch('/api/catalogos/tipos-equipo', {
         method: 'POST',

@@ -47,6 +47,14 @@ router.post('/tipos-equipo', async (req, res) => {
       return res.status(400).json({ error: 'El nombre del tipo de equipo es obligatorio' });
     }
 
+    const existing = await pool.query(
+      'SELECT id, nombre FROM tipos_equipo WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
+      [nombre]
+    );
+    if (existing.rows.length) {
+      return res.status(409).json({ error: `La categoría "${existing.rows[0].nombre}" ya existe` });
+    }
+
     const normalizedAttributes = validateAttributes(atributos);
     const client = await pool.connect();
     try {

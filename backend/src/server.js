@@ -185,7 +185,7 @@ async function initDatabase() {
       (2, 'Asignado', 'Equipo actualmente asignado a un empleado'),
       (3, 'Mantenimiento', 'Equipo en proceso de mantenimiento o reparación'),
       (4, 'Baja', 'Equipo dado de baja')
-      ON CONFLICT (id) DO NOTHING;
+      ON CONFLICT DO NOTHING;
     `);
 
     // 3.5. Crear tablas de catálogos y tipos de equipo
@@ -236,7 +236,8 @@ async function initDatabase() {
       (5, 'Periféricos y Accesorios', 'Teclados, mouse, dockstations, cámaras'),
       (6, 'Servidor / Almacenamiento', 'Servidores físicos, NAS y almacenamiento'),
       (7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
-      (8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
+      (8, 'No Break / UPS', 'Sistemas de energía ininterrumpida'),
+      (9, 'Vigilancia', 'Cámaras, NVR y dispositivos de seguridad')
       ON CONFLICT (id) DO NOTHING;
     `);
 

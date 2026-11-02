@@ -27,7 +27,7 @@ INSERT INTO estados_equipo (id, nombre, descripcion) VALUES
 (2, 'Asignado', 'Equipo actualmente asignado a un empleado'),
 (3, 'Mantenimiento', 'Equipo en proceso de mantenimiento o reparación'),
 (4, 'Baja', 'Equipo dado de baja')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- Tabla de Tipos/Categorías de Equipo
 CREATE TABLE IF NOT EXISTS tipos_equipo (
@@ -59,7 +59,8 @@ INSERT INTO tipos_equipo (id, nombre, descripcion) VALUES
 (5, 'Periféricos y Accesorios', 'Teclados, mouse, dockstations, cámaras'),
 (6, 'Servidor / Almacenamiento', 'Servidores físicos, NAS y almacenamiento'),
 (7, 'Movilidad / Smartphone / Tablet', 'Celulares corporativos y tablets'),
-(8, 'No Break / UPS', 'Sistemas de energía ininterrumpida')
+(8, 'No Break / UPS', 'Sistemas de energía ininterrumpida'),
+(9, 'Vigilancia', 'Cámaras, NVR y dispositivos de seguridad')
 ON CONFLICT (id) DO NOTHING;
 
 -- Campos técnicos propios de las categorías originales. Los campos generales
@@ -82,7 +83,10 @@ INSERT INTO atributos_tipo_equipo (tipo_equipo_id, nombre, clave, tipo, requerid
 (7, 'IMEI 1', 'imei1', 'texto', FALSE, 1),
 (7, 'IMEI 2', 'imei2', 'texto', FALSE, 2),
 (8, 'Capacidad (Watts / VA)', 'capacidad_watts', 'texto', FALSE, 0),
-(8, 'Tipo de UPS', 'tipo_ups', 'texto', FALSE, 1)
+(8, 'Tipo de UPS', 'tipo_ups', 'texto', FALSE, 1),
+(9, 'Tipo de dispositivo de seguridad', 'tipo_vigilancia', 'texto', FALSE, 0),
+(9, 'Conectividad', 'conectividad', 'texto', FALSE, 1),
+(9, 'Capacidad de disco', 'disco_capacidad', 'texto', FALSE, 2)
 ON CONFLICT (tipo_equipo_id, clave) DO NOTHING;
 
 -- Tablas de Catálogos Dinámicos

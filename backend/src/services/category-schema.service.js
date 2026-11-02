@@ -27,10 +27,11 @@ const DEFAULT_CATEGORY_ATTRIBUTES = {
   2: withCommon([{ nombre: 'Tipo de impresora', clave: 'tipo_impresora', tipo: 'texto' }, { nombre: 'Conectividad', clave: 'conectividad', tipo: 'texto' }, { nombre: 'Impresión dúplex', clave: 'duplex', tipo: 'si_no' }]),
   3: withCommon([{ nombre: 'Tamaño de pantalla', clave: 'tamano_pantalla', tipo: 'texto' }, { nombre: 'Resolución', clave: 'resolucion', tipo: 'texto' }, { nombre: 'Anclaje / soporte', clave: 'anclaje', tipo: 'texto' }]),
   4: withCommon([{ nombre: 'Tipo de dispositivo', clave: 'tipo_redes', tipo: 'texto' }, { nombre: 'Cantidad de puertos', clave: 'puertos', tipo: 'numero' }, { nombre: 'Velocidad de red', clave: 'velocidad_red', tipo: 'texto' }, { nombre: 'MAC Wi-Fi / red', clave: 'mac_wifi', tipo: 'texto' }]),
-  5: withCommon([{ nombre: 'Tipo de accesorio', clave: 'tipo_periferico', tipo: 'texto' }, { nombre: 'Conectividad', clave: 'conectividad', tipo: 'texto' }, { nombre: 'Capacidad de disco', clave: 'disco_capacidad', tipo: 'texto' }]),
+  5: withCommon([{ nombre: 'Tipo de accesorio', clave: 'tipo_periferico', tipo: 'texto' }, { nombre: 'Conectividad', clave: 'conectividad', tipo: 'texto' }]),
   6: withCommon([{ nombre: 'Hostname', clave: 'hostname', tipo: 'texto' }, { nombre: 'Sistema operativo', clave: 'so', tipo: 'texto' }, { nombre: 'Procesador', clave: 'cpu', tipo: 'texto' }, { nombre: 'RAM', clave: 'ram_capacidad', tipo: 'texto' }, { nombre: 'Almacenamiento', clave: 'disco_capacidad', tipo: 'texto' }, { nombre: 'Tipo de servidor / almacenamiento', clave: 'tipo_servidor', tipo: 'texto' }, { nombre: 'Cantidad de bahías', clave: 'bahias', tipo: 'numero' }]),
   7: withCommon([{ nombre: 'Sistema operativo', clave: 'so', tipo: 'texto' }, { nombre: 'RAM', clave: 'ram_capacidad', tipo: 'texto' }, { nombre: 'Almacenamiento', clave: 'disco_capacidad', tipo: 'texto' }, { nombre: 'Número telefónico', clave: 'numero_telefono', tipo: 'texto' }, { nombre: 'IMEI 1', clave: 'imei1', tipo: 'texto' }, { nombre: 'IMEI 2', clave: 'imei2', tipo: 'texto' }]),
-  8: withCommon([{ nombre: 'Capacidad (Watts / VA)', clave: 'capacidad_watts', tipo: 'texto' }, { nombre: 'Tipo de UPS', clave: 'tipo_ups', tipo: 'texto' }, { nombre: 'MAC Wi-Fi / red', clave: 'mac_wifi', tipo: 'texto' }])
+  8: withCommon([{ nombre: 'Capacidad (Watts / VA)', clave: 'capacidad_watts', tipo: 'texto' }, { nombre: 'Tipo de UPS', clave: 'tipo_ups', tipo: 'texto' }, { nombre: 'MAC Wi-Fi / red', clave: 'mac_wifi', tipo: 'texto' }]),
+  9: withCommon([{ nombre: 'Tipo de dispositivo de seguridad', clave: 'tipo_vigilancia', tipo: 'texto' }, { nombre: 'Conectividad', clave: 'conectividad', tipo: 'texto' }, { nombre: 'Capacidad de disco', clave: 'disco_capacidad', tipo: 'texto' }])
 };
 
 function tableName(tipoId) {

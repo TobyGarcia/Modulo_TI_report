@@ -1,6 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Layers } from 'lucide-react';
 
+const ATTRIBUTE_OPTIONS = {
+  tipo_impresora: ['Láser', 'Inyección de tinta', 'Térmica', 'Multifuncional'],
+  conectividad: ['Wi-Fi', 'Ethernet', 'Wi-Fi y Ethernet'],
+  anclaje: ['BASE MESA', 'PARED', 'SOPORTE MESA'],
+  tipo_redes: ['ROUTER', 'SWITCH', 'HUB', 'ACCESS POINT'],
+  tipo_periferico: ['Teclado', 'Mouse', 'Diadema', 'Webcam', 'Docking Station', 'Adaptador', 'Cable', 'Otro'],
+  tipo_servidor: ['Servidor físico', 'Servidor virtual', 'NAS', 'SAN', 'Almacenamiento externo'],
+  tipo_vigilancia: ['Cámara IP', 'Cámara analógica', 'NVR', 'DVR', 'Control de acceso', 'Otro'],
+  so: ['Android', 'iOS', 'Windows', 'Windows Server', 'Linux', 'macOS'],
+  tipo_ups: ['Torre', 'Rack', 'Online', 'Line Interactive']
+};
+
+const capacityWithGb = (value) => {
+  const normalized = String(value ?? '').trim();
+  return /^\d+(?:[.,]\d+)?$/.test(normalized) ? `${normalized} GB` : normalized;
+};
+
 const INITIAL_FORM = {
   item: '',
   personal_asignado: '',
@@ -120,6 +137,21 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
     }));
   };
 
+  const handleCategoryCapacityBlur = (key) => (event) => {
+    setFormData(prev => ({
+      ...prev,
+      atributos_categoria: { ...(prev.atributos_categoria || {}), [key]: capacityWithGb(event.target.value) }
+    }));
+  };
+
+  const handleCategoryMultiSelect = (key, option) => (event) => {
+    setFormData(prev => {
+      const selected = new Set(String(prev.atributos_categoria?.[key] || '').split(', ').filter(Boolean));
+      if (event.target.checked) selected.add(option); else selected.delete(option);
+      return { ...prev, atributos_categoria: { ...(prev.atributos_categoria || {}), [key]: [...selected].join(', ') } };
+    });
+  };
+
   const handleEmpleadoSelect = (e) => {
     const empId = e.target.value;
     if (!empId) {
@@ -145,7 +177,18 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    const formattedAttributes = { ...(formData.atributos_categoria || {}) };
+    for (const key of ['ram_capacidad', 'disco_capacidad']) {
+      if (Object.prototype.hasOwnProperty.call(formattedAttributes, key)) {
+        formattedAttributes[key] = capacityWithGb(formattedAttributes[key]);
+      }
+    }
+    onSave({
+      ...formData,
+      ram_capacidad: capacityWithGb(formData.ram_capacidad),
+      disco_capacidad: capacityWithGb(formData.disco_capacidad),
+      atributos_categoria: formattedAttributes
+    });
   };
 
   const currentTipoId = Number(formData.tipo_equipo_id || 1);
@@ -175,6 +218,22 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
         </label>
       );
     }
+    if (attribute.clave === 'tipo_ups') {
+      const selected = new Set(String(value).split(', ').filter(Boolean));
+      return (
+        <fieldset key={attribute.clave} className={`rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 ${fieldClass}`}>
+          <legend className="px-1 text-xs font-semibold text-gray-700">{attribute.nombre}</legend>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {ATTRIBUTE_OPTIONS.tipo_ups.map(option => (
+              <label key={option} className="flex items-center gap-1.5 text-xs text-gray-700">
+                <input type="checkbox" checked={selected.has(option)} onChange={handleCategoryMultiSelect(attribute.clave, option)} />
+                {option}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      );
+    }
     return (
       <div key={attribute.clave} className={fieldClass}>
         <label className="mb-1 block text-xs font-semibold text-gray-700">{attribute.nombre}{attribute.requerido ? ' *' : ''}</label>
@@ -183,10 +242,18 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
             onChange={handleCategoryAttributeChange}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
             placeholder="Detalles adicionales, accesorios o historial del equipo..." />
+        ) : ATTRIBUTE_OPTIONS[attribute.clave] ? (
+          <select name={attribute.clave} required={attribute.requerido} value={value}
+            onChange={handleCategoryAttributeChange}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+            <option value="">Selecciona una opción</option>
+            {ATTRIBUTE_OPTIONS[attribute.clave].map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
         ) : (
           <input type={attribute.tipo === 'numero' ? 'number' : attribute.tipo === 'fecha' ? 'date' : 'text'}
             step={attribute.tipo === 'numero' ? 'any' : undefined} name={attribute.clave}
             required={attribute.requerido} value={value} onChange={handleCategoryAttributeChange}
+            onBlur={['ram_capacidad', 'disco_capacidad'].includes(attribute.clave) ? handleCategoryCapacityBlur(attribute.clave) : undefined}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
         )}
       </div>
@@ -237,6 +304,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
                       <option value={6}>Servidor / Almacenamiento</option>
                       <option value={7}>Movilidad / Smartphone / Tablet</option>
                       <option value={8}>No Break / UPS</option>
+                      <option value={9}>Vigilancia</option>
                     </>
                   )}
                 </select>
@@ -272,56 +340,41 @@ export default function EquipmentFormModal({ isOpen, onClose, onSave, equipmentT
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Empresa</label>
-                <input
-                  type="text"
+                <select
                   name="empresa"
-                  list="empresas-list"
                   value={formData.empresa || ''}
                   onChange={handleChange}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Ej. ITZ"
-                />
-                <datalist id="empresas-list">
-                  {catalogos.empresas.map(emp => (
-                    <option key={emp.id} value={emp.acronimo || emp.nombre}>{emp.acronimo ? `${emp.acronimo} — ${emp.nombre}` : emp.nombre}</option>
-                  ))}
-                </datalist>
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="">Selecciona una empresa</option>
+                  {catalogos.empresas.map(emp => <option key={emp.id} value={emp.acronimo || emp.nombre}>{emp.acronimo ? `${emp.acronimo} — ${emp.nombre}` : emp.nombre}</option>)}
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Ciudad / Base</label>
-                <input
-                  type="text"
+                <select
                   name="ciudad"
-                  list="bases-list"
                   value={formData.ciudad || ''}
                   onChange={handleChange}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Ej. San Francisco de Campeche"
-                />
-                <datalist id="bases-list">
-                  {catalogos.bases.map(b => (
-                    <option key={b.id} value={b.nombre} />
-                  ))}
-                </datalist>
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="">Selecciona una base / ciudad</option>
+                  {catalogos.bases.map(b => <option key={b.id} value={b.nombre}>{b.nombre}</option>)}
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Área / Depto</label>
-                <input
-                  type="text"
+                <select
                   name="area"
-                  list="areas-list"
                   value={formData.area || ''}
                   onChange={handleChange}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="ej. Sistemas, Finanzas"
-                />
-                <datalist id="areas-list">
-                  {catalogos.areas.map(a => (
-                    <option key={a.id} value={a.nombre} />
-                  ))}
-                </datalist>
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="">Selecciona un área / departamento</option>
+                  {catalogos.areas.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+                </select>
               </div>
             </div>
           </div>
