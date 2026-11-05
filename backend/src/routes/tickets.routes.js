@@ -743,15 +743,21 @@ router.post('/:id/finalizar', authenticateToken, authorizeRoles('admin', 'superv
     `, [diagnostico, solucion + (observaciones ? '\n\nObservaciones: ' + observaciones : ''), parseInt(req.params.id, 10)]);
     if (!result.rows.length) return res.status(409).json({ error: 'El ticket debe estar en proceso antes de finalizarlo' });
     const ticket = result.rows[0];
-    const recipient = await pool.query(`SELECT id FROM usuarios WHERE empleado_id = $1 LIMIT 1`, [ticket.empleado_id]);
-    if (recipient.rows[0]) {
-      await pool.query(`INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo) VALUES ($1, $2, 'ticket_resuelto')`, [recipient.rows[0].id, ticket.id]);
-    }
-    void sendTeamsNotification({
-      event: 'ticket_resuelto', audience: 'cliente', recipient: { empleado_id: ticket.empleado_id, usuario_id: recipient.rows[0]?.id || null },
-      ticket: { id: ticket.id, folio: ticket.folio, diagnostico, solucion }
-    });
-    res.json({ message: 'Ticket finalizado y enviado al cliente para su confirmación', ticket: result.rows[0] });
+    // El estado ya fue guardado. Un problema de notificaciones no debe impedir
+    // finalizar ni dejar al técnico atrapado en el modal.
+    void (async () => {
+      try {
+        const recipient = await pool.query(`SELECT id FROM usuarios WHERE empleado_id = $1 LIMIT 1`, [ticket.empleado_id]);
+        if (recipient.rows[0]) {
+          await pool.query(`INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo) VALUES ($1, $2, 'ticket_resuelto')`, [recipient.rows[0].id, ticket.id]);
+        }
+        await sendTeamsNotification({
+          event: 'ticket_resuelto', audience: 'cliente', recipient: { empleado_id: ticket.empleado_id, usuario_id: recipient.rows[0]?.id || null },
+          ticket: { id: ticket.id, folio: ticket.folio, diagnostico, solucion }
+        });
+      } catch (notificationErr) { console.warn('Ticket finalizado, pero no se envió la notificación:', notificationErr.message); }
+    })();
+    res.json({ message: 'Ticket finalizado y enviado al cliente para su confirmación', ticket });
   } catch (err) {
     // Algunas instalaciones antiguas aún no tienen solucion_tecnico.
     if (err.code === '42703') {
