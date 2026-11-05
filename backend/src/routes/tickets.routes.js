@@ -30,6 +30,21 @@ function createClientToken() {
   return crypto.randomBytes(32).toString('base64url');
 }
 
+// Un flujo de Power Automate o un bot de Teams puede recibir este webhook y
+// entregar la alerta al canal técnico o al usuario destinatario. No se envían
+// secretos ni se bloquea la creación/cierre si Teams no está configurado.
+async function sendTeamsNotification(payload) {
+  const webhookUrl = process.env.TEAMS_NOTIFICATION_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000)
+    });
+  } catch (err) {
+    console.warn('No fue posible enviar la notificación a Teams:', err.message);
+  }
+}
+
 function validatePublicTicket({ solicitante_nombre, solicitante_email, descripcion_problema, fotos_evidencia }) {
   if (!solicitante_nombre || solicitante_nombre.trim().length > 150) return 'El nombre del solicitante es obligatorio y debe tener máximo 150 caracteres';
   if (!descripcion_problema || descripcion_problema.trim().length > 4000) return 'La descripción es obligatoria y debe tener máximo 4,000 caracteres';
@@ -168,6 +183,16 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
 
     const result = await pool.query(query, values);
     const ticket = result.rows[0];
+    const technicians = await pool.query(`
+      SELECT u.id FROM usuarios u JOIN empleados e ON e.id = u.empleado_id
+      WHERE e.role = 'tecnico' AND e.estado = 'activo'
+    `);
+    await Promise.all(technicians.rows.map(({ id }) => pool.query(
+      `INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo) VALUES ($1, $2, 'nuevo_ticket')`, [id, ticket.id]
+    )));
+    void sendTeamsNotification({
+      event: 'ticket_nuevo', audience: 'tecnicos', ticket: { id: ticket.id, folio: ticket.folio, prioridad: ticket.prioridad, categoria: ticket.categoria_falla, solicitante: ticket.solicitante_nombre }
+    });
     delete ticket.cliente_token_hash;
     res.status(201).json({
       message: 'Ticket creado exitosamente',
@@ -717,6 +742,15 @@ router.post('/:id/finalizar', authenticateToken, authorizeRoles('admin', 'superv
       RETURNING *
     `, [diagnostico, solucion + (observaciones ? '\n\nObservaciones: ' + observaciones : ''), parseInt(req.params.id, 10)]);
     if (!result.rows.length) return res.status(409).json({ error: 'El ticket debe estar en proceso antes de finalizarlo' });
+    const ticket = result.rows[0];
+    const recipient = await pool.query(`SELECT id FROM usuarios WHERE empleado_id = $1 LIMIT 1`, [ticket.empleado_id]);
+    if (recipient.rows[0]) {
+      await pool.query(`INSERT INTO notificaciones_tickets (usuario_id, ticket_id, tipo) VALUES ($1, $2, 'ticket_resuelto')`, [recipient.rows[0].id, ticket.id]);
+    }
+    void sendTeamsNotification({
+      event: 'ticket_resuelto', audience: 'cliente', recipient: { empleado_id: ticket.empleado_id, usuario_id: recipient.rows[0]?.id || null },
+      ticket: { id: ticket.id, folio: ticket.folio, diagnostico, solucion }
+    });
     res.json({ message: 'Ticket finalizado y enviado al cliente para su confirmación', ticket: result.rows[0] });
   } catch (err) {
     // Algunas instalaciones antiguas aún no tienen solucion_tecnico.
