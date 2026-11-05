@@ -270,8 +270,8 @@ router.get('/cliente', publicTicketReadRateLimit, async (req, res) => {
       SELECT 
         t.id, t.folio, t.tipo_servicio, t.categoria_falla, t.descripcion_problema,
         t.prioridad, t.estado, t.tecnico_nombre, t.fecha_programada_atencion,
-        t.fecha_inicio_atencion, t.fecha_resolucion, t.motivo_rechazo,
-        t.diagnostico_tecnico, t.calificacion_servicio, t.comentarios_cierre, t.created_at,
+        t.fecha_abierto, t.fecha_inicio_atencion, t.fecha_resolucion, t.motivo_rechazo,
+        t.diagnostico_tecnico, t.solucion_tecnico, t.calificacion_servicio, t.comentarios_cierre, t.created_at,
         e.hostname,
         e.serial,
         e.marca,
