@@ -694,6 +694,9 @@ async function initDatabase() {
         solicitante_nombre VARCHAR(150) NOT NULL,
         solicitante_email VARCHAR(150),
         solicitante_telefono VARCHAR(50),
+        solicitante_puesto VARCHAR(100),
+        proyecto_nombre VARCHAR(150),
+        numero_orden VARCHAR(30),
         area_solicitante VARCHAR(100),
         empresa VARCHAR(100),
         tipo_servicio VARCHAR(50) DEFAULT 'correctivo',
@@ -701,16 +704,18 @@ async function initDatabase() {
         descripcion_problema TEXT NOT NULL,
         fotos_evidencia JSONB DEFAULT '[]',
         prioridad VARCHAR(20) DEFAULT 'media',
-        estado VARCHAR(30) DEFAULT 'abierto',
+        estado VARCHAR(30) DEFAULT 'nuevo',
         supervisor_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
         supervisor_nombre VARCHAR(150),
         tecnico_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
         tecnico_nombre VARCHAR(150),
         fecha_programada_atencion TIMESTAMP,
+        fecha_abierto TIMESTAMP,
         fecha_inicio_atencion TIMESTAMP,
         fecha_resolucion TIMESTAMP,
         motivo_rechazo TEXT,
         diagnostico_tecnico TEXT,
+        solucion_tecnico TEXT,
         mantenimiento_id INT REFERENCES mantenimientos(id) ON DELETE SET NULL,
         calificacion_servicio INT,
         comentarios_cierre TEXT,
@@ -724,7 +729,14 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_tickets_equipo ON tickets_mantenimiento(equipo_id);
     `);
 
-    await pool.query('ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS cliente_token_hash VARCHAR(64)');
+    await pool.query(`
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS cliente_token_hash VARCHAR(64);
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS solicitante_puesto VARCHAR(100);
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS proyecto_nombre VARCHAR(150);
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS numero_orden VARCHAR(30);
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS fecha_abierto TIMESTAMP;
+      ALTER TABLE tickets_mantenimiento ADD COLUMN IF NOT EXISTS solucion_tecnico TEXT;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notificaciones_tickets (

@@ -57,30 +57,21 @@ async function requireAssignedTechnician(req, res, next) {
   }
 }
 
-// Helper para generar el siguiente Folio correlativo TCK-YYYY-XXXX
+// El número de ticket incorpora fecha, hora y orden correlativo del día.
 async function generarSiguienteFolio() {
-  const anio = new Date().getFullYear();
+  const now = new Date();
+  const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const res = await pool.query(
-    "SELECT folio FROM tickets_mantenimiento WHERE folio LIKE $1 ORDER BY id DESC LIMIT 1",
-    [`TCK-${anio}-%`]
+    "SELECT COUNT(*)::int AS total FROM tickets_mantenimiento WHERE folio LIKE $1",
+    [`TCK-${day}-%`]
   );
-
-  let siguienteNum = 1;
-  if (res.rows.length > 0) {
-    const ultimoFolio = res.rows[0].folio;
-    const partes = ultimoFolio.split('-');
-    if (partes.length === 3) {
-      const num = parseInt(partes[2], 10);
-      if (!isNaN(num)) siguienteNum = num + 1;
-    }
-  }
-
-  const correlativo = String(siguienteNum).padStart(4, '0');
-  return `TCK-${anio}-${correlativo}`;
+  const correlativo = String((res.rows[0]?.total || 0) + 1).padStart(4, '0');
+  return `TCK-${day}-${time}-${correlativo}`;
 }
 
-// 1. Crear nuevo ticket desde una sesión de cliente por PIN.
-router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles('cliente'), async (req, res) => {
+// 1. Cualquier persona puede levantar un ticket. El equipo personal no es requisito.
+router.post('/', publicTicketCreateRateLimit, async (req, res) => {
   try {
     const {
       equipo_id,
@@ -88,6 +79,9 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
       solicitante_nombre,
       solicitante_email,
       solicitante_telefono,
+      solicitante_puesto,
+      proyecto_nombre,
+      numero_orden,
       area_solicitante,
       empresa,
       tipo_servicio,
@@ -97,18 +91,9 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
       prioridad
     } = req.body;
 
-    const clientEmployeeId = parseInt(req.user.empleado_id, 10);
-    if (!clientEmployeeId) return res.status(403).json({ error: 'La cuenta de cliente no está vinculada a un empleado' });
-
-    const employeeResult = await pool.query(
-      "SELECT id, nombre, email, area, empresa FROM empleados WHERE id = $1 AND estado = 'activo'",
-      [clientEmployeeId]
-    );
-    if (!employeeResult.rows.length) return res.status(403).json({ error: 'El empleado asociado no está activo' });
-    const clientEmployee = employeeResult.rows[0];
     const validationError = validatePublicTicket({
-      solicitante_nombre: clientEmployee.nombre,
-      solicitante_email: clientEmployee.email || solicitante_email,
+      solicitante_nombre,
+      solicitante_email,
       descripcion_problema,
       fotos_evidencia
     });
@@ -117,32 +102,18 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
     // El QR es opcional para clientes: permite identificar el equipo exacto.
     // Sin QR se crea un reporte general ligado a la persona; si sólo tiene un
     // equipo asignado, se asocia automáticamente para ayudar al técnico.
-    let eqArea = clientEmployee.area || area_solicitante;
-    let eqEmpresa = clientEmployee.empresa || empresa;
-    let eqEmpId = clientEmployeeId;
+    let eqArea = area_solicitante;
+    let eqEmpresa = empresa;
+    let eqEmpId = empleado_id ? parseInt(empleado_id, 10) : null;
     let resolvedEquipmentId = equipo_id ? parseInt(equipo_id, 10) : null;
 
     if (resolvedEquipmentId) {
       const eqCheck = await pool.query('SELECT area, empresa, empleado_id FROM equipos WHERE id = $1', [resolvedEquipmentId]);
       if (eqCheck.rows.length > 0) {
-        if (eqCheck.rows[0].empleado_id !== clientEmployeeId) {
-          return res.status(403).json({ error: 'Este equipo no está asignado a tu usuario' });
-        }
         if (!eqArea) eqArea = eqCheck.rows[0].area;
         if (!eqEmpresa) eqEmpresa = eqCheck.rows[0].empresa;
       } else {
         return res.status(404).json({ error: 'Equipo no encontrado' });
-      }
-    } else {
-      const assignedEquipment = await pool.query(
-        'SELECT id, area, empresa FROM equipos WHERE empleado_id = $1 AND estado_id = 2 ORDER BY id ASC LIMIT 2',
-        [clientEmployeeId]
-      );
-      if (assignedEquipment.rows.length === 1) {
-        const equipment = assignedEquipment.rows[0];
-        resolvedEquipmentId = equipment.id;
-        if (!eqArea) eqArea = equipment.area;
-        if (!eqEmpresa) eqEmpresa = equipment.empresa;
       }
     }
 
@@ -157,6 +128,9 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
         solicitante_nombre,
         solicitante_email,
         solicitante_telefono,
+        solicitante_puesto,
+        proyecto_nombre,
+        numero_orden,
         area_solicitante,
         empresa,
         tipo_servicio,
@@ -166,7 +140,7 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
         prioridad,
         cliente_token_hash,
         estado
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'abierto')
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'nuevo')
       RETURNING *;
     `;
 
@@ -174,9 +148,12 @@ router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles(
       folio,
       resolvedEquipmentId,
       eqEmpId ? parseInt(eqEmpId, 10) : null,
-      clientEmployee.nombre,
-      clientEmployee.email || (solicitante_email ? solicitante_email.trim() : null),
+      solicitante_nombre.trim(),
+      solicitante_email ? solicitante_email.trim() : null,
       solicitante_telefono ? solicitante_telefono.trim() : null,
+      solicitante_puesto ? solicitante_puesto.trim() : null,
+      proyecto_nombre ? proyecto_nombre.trim() : null,
+      numero_orden ? numero_orden.trim() : null,
       eqArea || 'General',
       eqEmpresa || 'ITZ OIL & GAS',
       tipo_servicio || 'correctivo',
@@ -265,8 +242,8 @@ router.get('/cliente/mis-tickets', authenticateToken, authorizeRoles('cliente'),
       SELECT
         t.id, t.folio, t.tipo_servicio, t.categoria_falla, t.descripcion_problema,
         t.prioridad, t.estado, t.tecnico_nombre, t.fecha_programada_atencion,
-        t.fecha_inicio_atencion, t.fecha_resolucion, t.motivo_rechazo,
-        t.diagnostico_tecnico, t.calificacion_servicio, t.comentarios_cierre, t.created_at,
+        t.fecha_abierto, t.fecha_inicio_atencion, t.fecha_resolucion, t.motivo_rechazo,
+        t.diagnostico_tecnico, t.solucion_tecnico, t.calificacion_servicio, t.comentarios_cierre, t.created_at,
         e.hostname, e.serial, e.marca, e.modelo
       FROM tickets_mantenimiento t
       LEFT JOIN equipos e ON t.equipo_id = e.id
@@ -336,6 +313,41 @@ router.post('/cliente/:id/calificar', authenticateToken, authorizeRoles('cliente
   }
 });
 
+// Pool compartido: un técnico toma el siguiente ticket disponible. La operación
+// es atómica para que dos técnicos no puedan apropiarse del mismo ticket.
+router.get('/tecnico/pool', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT t.*, e.hostname, e.serial, e.marca, e.modelo
+      FROM tickets_mantenimiento t
+      LEFT JOIN equipos e ON e.id = t.equipo_id
+      WHERE t.estado = 'nuevo'
+      ORDER BY CASE t.prioridad WHEN 'critica' THEN 1 WHEN 'alta' THEN 2 WHEN 'media' THEN 3 ELSE 4 END, t.created_at ASC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al consultar pool de tickets:', err);
+    res.status(500).json({ error: 'No fue posible obtener el pool de tickets' });
+  }
+});
+
+router.put('/:id/tomar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE tickets_mantenimiento
+      SET estado = 'abierto', tecnico_id = $1, tecnico_nombre = $2,
+          fecha_abierto = COALESCE(fecha_abierto, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3 AND estado = 'nuevo'
+      RETURNING *
+    `, [req.user.id, req.user.nombre, parseInt(req.params.id, 10)]);
+    if (!result.rows.length) return res.status(409).json({ error: 'Este ticket ya fue tomado por otro técnico' });
+    res.json({ message: 'Ticket abierto y asignado a tu bandeja', ticket: result.rows[0] });
+  } catch (err) {
+    console.error('Error al tomar ticket:', err);
+    res.status(500).json({ error: 'No fue posible tomar el ticket' });
+  }
+});
+
 // 4. Bandeja del supervisor: tickets pendientes de revisión y asignación
 router.get('/supervisor/pendientes', authenticateToken, authorizeRoles('admin', 'supervisor'), async (req, res) => {
   try {
@@ -389,12 +401,13 @@ router.get('/tecnico/mis-tickets', authenticateToken, authorizeRoles('admin', 's
       FROM tickets_mantenimiento t
       LEFT JOIN equipos e ON t.equipo_id = e.id
       WHERE (t.tecnico_id = $1 OR LOWER(TRIM(t.tecnico_nombre)) = LOWER(TRIM($2)))
-        AND t.estado IN ('asignado', 'en_proceso', 'resuelto')
+        AND t.estado IN ('abierto', 'asignado', 'en_proceso', 'resuelto')
       ORDER BY 
         CASE t.estado
           WHEN 'en_proceso' THEN 1
-          WHEN 'asignado' THEN 2
-          WHEN 'resuelto' THEN 3
+          WHEN 'abierto' THEN 2
+          WHEN 'asignado' THEN 3
+          WHEN 'resuelto' THEN 4
           ELSE 4
         END,
         t.fecha_programada_atencion ASC NULLS LAST,
@@ -666,7 +679,7 @@ router.put('/:id/iniciar', authenticateToken, authorizeRoles('admin', 'superviso
         estado = 'en_proceso',
         fecha_inicio_atencion = COALESCE(fecha_inicio_atencion, CURRENT_TIMESTAMP),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
+      WHERE id = $1 AND estado IN ('abierto', 'asignado')
       RETURNING *;
     `;
 
@@ -679,6 +692,41 @@ router.put('/:id/iniciar', authenticateToken, authorizeRoles('admin', 'superviso
   } catch (err) {
     console.error('Error al iniciar atención del ticket:', err);
     res.status(500).json({ error: 'Error al actualizar estado' });
+  }
+});
+
+// Cierre de Helpdesk sin obligar a usar el flujo de mantenimiento/QR. Los
+// equipos opcionales siguen pudiendo usar la ruta legacy /resolver.
+router.post('/:id/finalizar', authenticateToken, authorizeRoles('admin', 'supervisor', 'tecnico'), requireAssignedTechnician, async (req, res) => {
+  let diagnostico = '';
+  let solucion = '';
+  let observaciones = '';
+  try {
+    diagnostico = String(req.body?.diagnostico || '').trim();
+    solucion = String(req.body?.solucion || '').trim();
+    observaciones = String(req.body?.observaciones || '').trim();
+    if (!diagnostico || !solucion) return res.status(400).json({ error: 'Captura el diagnóstico y la solución' });
+    const result = await pool.query(`
+      UPDATE tickets_mantenimiento
+      SET estado = 'resuelto', diagnostico_tecnico = $1,
+          solucion_tecnico = $2,
+          fecha_resolucion = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3 AND estado = 'en_proceso'
+      RETURNING *
+    `, [diagnostico, solucion + (observaciones ? '\n\nObservaciones: ' + observaciones : ''), parseInt(req.params.id, 10)]);
+    if (!result.rows.length) return res.status(409).json({ error: 'El ticket debe estar en proceso antes de finalizarlo' });
+    res.json({ message: 'Ticket finalizado y enviado al cliente para su confirmación', ticket: result.rows[0] });
+  } catch (err) {
+    // Algunas instalaciones antiguas aún no tienen solucion_tecnico.
+    if (err.code === '42703') {
+      try {
+        const result = await pool.query(`UPDATE tickets_mantenimiento SET estado = 'resuelto', diagnostico_tecnico = $1, fecha_resolucion = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND estado = 'en_proceso' RETURNING *`, [diagnostico + '\n\nSolución: ' + solucion + (observaciones ? '\n\nObservaciones: ' + observaciones : ''), parseInt(req.params.id, 10)]);
+        if (!result.rows.length) return res.status(409).json({ error: 'El ticket debe estar en proceso antes de finalizarlo' });
+        return res.json({ message: 'Ticket finalizado y enviado al cliente para su confirmación', ticket: result.rows[0] });
+      } catch (fallbackErr) { console.error('Error al finalizar ticket:', fallbackErr); }
+    }
+    console.error('Error al finalizar ticket:', err);
+    res.status(500).json({ error: 'No fue posible finalizar el ticket' });
   }
 });
 
