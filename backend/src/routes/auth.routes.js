@@ -70,7 +70,7 @@ router.post('/cliente-pin', loginRateLimit, async (req, res) => {
 
     const result = await pool.query(`
       SELECT u.id, u.nombre, u.pin_hash, u.empleado_id,
-             e.nombre AS empleado_nombre, e.email, e.area, e.empresa
+             e.nombre AS empleado_nombre, e.email, e.area, e.empresa, e.puesto
       FROM usuarios u
       JOIN empleados e ON e.id = u.empleado_id
       WHERE e.role = 'cliente' AND u.pin_hash IS NOT NULL AND e.estado = 'activo'
@@ -92,7 +92,8 @@ router.post('/cliente-pin', loginRateLimit, async (req, res) => {
       empleado_id: clientUser.empleado_id,
       email: clientUser.email,
       area: clientUser.area,
-      empresa: clientUser.empresa
+      empresa: clientUser.empresa,
+      puesto: clientUser.puesto
     };
     const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: '8h', algorithm: 'HS256', issuer: 'sistema-qr', audience: 'sistema-qr-web'

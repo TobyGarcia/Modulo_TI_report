@@ -71,7 +71,7 @@ async function generarSiguienteFolio() {
 }
 
 // 1. Cualquier persona puede levantar un ticket. El equipo personal no es requisito.
-router.post('/', publicTicketCreateRateLimit, async (req, res) => {
+router.post('/', publicTicketCreateRateLimit, authenticateToken, authorizeRoles('cliente'), async (req, res) => {
   try {
     const {
       equipo_id,
@@ -104,7 +104,9 @@ router.post('/', publicTicketCreateRateLimit, async (req, res) => {
     // equipo asignado, se asocia automáticamente para ayudar al técnico.
     let eqArea = area_solicitante;
     let eqEmpresa = empresa;
-    let eqEmpId = empleado_id ? parseInt(empleado_id, 10) : null;
+    // El PIN vincula el ticket al empleado real; los datos visibles pueden
+    // corregirse para reflejar la solicitud sin permitir suplantación.
+    let eqEmpId = parseInt(req.user.empleado_id, 10);
     let resolvedEquipmentId = equipo_id ? parseInt(equipo_id, 10) : null;
 
     if (resolvedEquipmentId) {
